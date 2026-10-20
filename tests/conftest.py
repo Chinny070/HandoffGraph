@@ -68,7 +68,7 @@ def env(monkeypatch):
     def get_web(url):
         state['web_calls'] = state.get('web_calls', 0) + 1
         body = state.get('source_bytes', b'Verified public source text for deterministic offline tests.')
-        return types.SimpleNamespace(status_code=state.get('web_status', 200), body=body)
+        return types.SimpleNamespace(status=state.get('web_status', 200), body=body)
     gl = types.SimpleNamespace(
         Contract=Contract, Event=Emitter,
         public=types.SimpleNamespace(write=lambda fn: fn, view=lambda fn: fn),

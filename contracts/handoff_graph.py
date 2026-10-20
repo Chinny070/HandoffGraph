@@ -143,7 +143,7 @@ def read_pinned_source(url: str, expected_sha256: str) -> str:
     """Called ONLY from GenLayer non-deterministic closures by each validator."""
     try:
         response = gl.nondet.web.get(url)
-        if response.status_code != 200:
+        if response.status != 200:
             return ''
         raw = response.body
         if not isinstance(raw, bytes) or not (1 <= len(raw) <= MAX_SOURCE_BYTES):
