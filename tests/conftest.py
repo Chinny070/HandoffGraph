@@ -14,9 +14,20 @@ class Generic(list):
         return cls
 
 class Map(dict):
+    factory = None
+
     @classmethod
     def __class_getitem__(cls, _):
         return cls
+
+    def get_or_insert_default(self, key):
+        if key not in self:
+            record = self.factory.__new__(self.factory)
+            for name, ann in self.factory.__annotations__.items():
+                if ann is Generic:
+                    setattr(record, name, [])
+            self[key] = record
+        return self[key]
 
 class Emitter:
     def __init__(self, *args, **kwargs):
@@ -81,7 +92,12 @@ def env(monkeypatch):
     spec.loader.exec_module(module)
     monkeypatch.setattr(module, 'clock', lambda: state['now'])
     obj = module.HandoffGraph()
-    obj.workflows, obj.stages, obj.decisions, obj.counterexamples = Map(), Map(), Map(), Map()
+    def typed(cls):
+        m = Map()
+        m.factory = cls
+        return m
+    obj.workflows, obj.stages = typed(module.Workflow), typed(module.Stage)
+    obj.decisions, obj.counterexamples = typed(module.Decision), typed(module.Counterexample)
     return module, obj, state, gl
 
 @pytest.fixture
