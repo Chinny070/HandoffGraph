@@ -158,6 +158,25 @@ def read_pinned_source(url: str, expected_sha256: str) -> str:
         return ''
 
 
+def assemble_sources(url: str, expected_sha: str, support: str, support_sha: str,
+                     counter_source: str, counter_sha: str) -> str:
+    primary = read_pinned_source(url, expected_sha)
+    if not primary:
+        return ''
+    assembled = 'PRIMARY VERIFIED ARTIFACT\n' + primary
+    if support:
+        supplemental = read_pinned_source(support, support_sha)
+        if not supplemental:
+            return ''
+        assembled += '\nSUPPLEMENTAL VERIFIED ARTIFACT\n' + supplemental
+    if counter_source:
+        opposing = read_pinned_source(counter_source, counter_sha)
+        if not opposing:
+            return ''
+        assembled += '\nVERIFIED COUNTEREVIDENCE ARTIFACT\n' + opposing
+    return assembled
+
+
 def prompt(rule: str, submission: str, objection: str, appeal: str, source: str, label: str) -> str:
     return f'''HANDOFFGRAPH / {label}\n
 You are independently deciding if the delivered work SATISFIES EVERY material requirement
@@ -326,6 +345,18 @@ class Counterexample:
     appeal_note: str
 
 
+def init_record(rec, cls, values):
+    names = list(cls.__annotations__.keys())
+    require(len(names) == len(values), 'RECORD_ARITY')
+    for name, value in zip(names, values):
+        if isinstance(value, list):
+            target = getattr(rec, name)
+            for item in value:
+                target.append(item)
+        else:
+            setattr(rec, name, value)
+
+
 class WorkflowSealed(gl.Event):
     def __init__(self, workflow_id: u256, root: str, /, **kwargs): ...
 
@@ -432,25 +463,8 @@ class HandoffGraph(gl.Contract):
         support, support_sha = str(support_url), str(support_sha256)
         counter_source, counter_sha = str(counter_url), str(counter_sha256)
 
-        def all_sources() -> str:
-            primary = read_pinned_source(url, expected_sha)
-            if not primary:
-                return ''
-            assembled = 'PRIMARY VERIFIED ARTIFACT\n' + primary
-            if support:
-                supplemental = read_pinned_source(support, support_sha)
-                if not supplemental:
-                    return ''
-                assembled += '\nSUPPLEMENTAL VERIFIED ARTIFACT\n' + supplemental
-            if counter_source:
-                opposing = read_pinned_source(counter_source, counter_sha)
-                if not opposing:
-                    return ''
-                assembled += '\nVERIFIED COUNTEREVIDENCE ARTIFACT\n' + opposing
-            return assembled
-
         def leader() -> dict:
-            source = all_sources()
+            source = assemble_sources(url, expected_sha, support, support_sha, counter_source, counter_sha)
             if not source:
                 return verdict({'decision':'UNKNOWN', 'coverage':'UNVERIFIABLE',
                     'risk':True, 'gap':'SOURCE_UNAVAILABLE', 'explanation':'Source fetch/hash failed'})
@@ -464,7 +478,7 @@ class HandoffGraph(gl.Contract):
                 proposed = proposed_result.calldata
                 if not shape(proposed):
                     return False
-                source = all_sources()
+                source = assemble_sources(url, expected_sha, support, support_sha, counter_source, counter_sha)
                 if not source:
                     return proposed['decision'] == UNKNOWN and proposed['coverage'] == UNVERIFIABLE and proposed['risk'] is True
                 independent = verdict(gl.nondet.exec_prompt(
@@ -542,13 +556,16 @@ class HandoffGraph(gl.Contract):
         purpose = bounded(purpose, MAX_RULE, 'BAD_PURPOSE')
         workflow_id = self.next_workflow
         self.next_workflow = u256(int(workflow_id) + 1)
-        self.workflows[workflow_id] = Workflow(gl.message.sender_address, name, purpose,
-            False, '', DynArray[u256](), u256(0), u32(0), u32(0))
+        init_record(self.workflows.get_or_insert_default(workflow_id), Workflow,
+            (gl.message.sender_address, name, purpose,
+             False, '', [], u256(0), u32(0), u32(0)))
         return workflow_id
 
     @gl.public.write
     def add_stage(self, workflow_id: u256, name: str, worker: Address, reviewer: Address,
                   criterion: str, dependency_1: u256, dependency_2: u256, dependency_3: u256) -> u256:
+        worker = Address(worker) if not isinstance(worker, Address) else worker
+        reviewer = Address(reviewer) if not isinstance(reviewer, Address) else reviewer
         w = self._workflow(workflow_id)
         self._owner(w)
         require(not w.sealed, 'GRAPH_SEALED')
@@ -558,7 +575,7 @@ class HandoffGraph(gl.Contract):
         require(str(reviewer) != str(Address('0x0000000000000000000000000000000000000000')), 'BAD_REVIEWER')
         name = bounded(name, MAX_NAME, 'BAD_NAME')
         criterion = bounded(criterion, MAX_RULE, 'BAD_CRITERION')
-        deps = DynArray[u256]()
+        deps = []
         for dep in (dependency_1, dependency_2, dependency_3):
             if int(dep) == 0:
                 continue
@@ -569,10 +586,11 @@ class HandoffGraph(gl.Contract):
         # Dependencies always refer to already-created nodes: DAG construction by design.
         stage_id = self.next_stage
         self.next_stage = u256(int(stage_id) + 1)
-        self.stages[stage_id] = Stage(workflow_id, worker, reviewer, name, criterion, deps,
-            u8(READY), u32(0), '', '', '', '', '', '', u256(0), u256(0),
-            u8(UNKNOWN), u256(0), False, '', DynArray[str](), u256(0), u256(0),
-            '', '', '', '', u256(0), False, '', u256(0))
+        init_record(self.stages.get_or_insert_default(stage_id), Stage,
+            (workflow_id, worker, reviewer, name, criterion, deps,
+             u8(READY), u32(0), '', '', '', '', '', '', u256(0), u256(0),
+             u8(UNKNOWN), u256(0), False, '', [], u256(0), u256(0),
+             '', '', '', '', u256(0), False, '', u256(0)))
         w.stage_ids.append(stage_id)
         return stage_id
 
@@ -714,13 +732,13 @@ class HandoffGraph(gl.Contract):
         require(shape(result), 'INVALID_JURY_RESULT')
         did = self.next_decision
         self.next_decision = u256(int(did) + 1)
-        self.decisions[did] = Decision(stage_id, s.attempt, digest(s.criterion),
+        init_record(self.decisions.get_or_insert_default(did), Decision, (stage_id, s.attempt, digest(s.criterion),
             s.submission_hash, s.artifact_url, s.artifact_sha256, s.evidence, s.objection, '', digest(s.objection), u8(result['decision']), u8(result['coverage']),
             result['risk'], u8(UNKNOWN), u8(UNVERIFIABLE), True, result['gap'],
             result['explanation'], '', PROVENANCE, False, '',
             json.dumps(requirements, sort_keys=True, separators=(',', ':')),
             digest([str(x) for x in s.requirements]), str(s.support_sha256),
-            digest(str(s.repair_note)), '')
+            digest(str(s.repair_note)), ''))
         s.ruling = u8(result['decision'])
         s.decision_id = did
         s.appeal_deadline = u256(clock() + APPEAL_SECONDS)
@@ -948,9 +966,9 @@ class HandoffGraph(gl.Contract):
         require(pinned_source(url, sha256), 'INVALID_PINNED_SOURCE')
         cid = self.next_counter
         self.next_counter = u256(int(cid) + 1)
-        self.counterexamples[cid] = Counterexample(stage_id, str(s.receipt),
+        init_record(self.counterexamples.get_or_insert_default(cid), Counterexample, (stage_id, str(s.receipt),
             gl.message.sender_address, allegation, url, sha256, u256(clock()),
-            u8(COUNTER_PENDING), u8(UNKNOWN), '', u256(0), '')
+            u8(COUNTER_PENDING), u8(UNKNOWN), '', u256(0), ''))
         s.counter_id = cid
         s.quarantined = True
         return cid
