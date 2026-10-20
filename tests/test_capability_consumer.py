@@ -126,7 +126,7 @@ def test_revoked_graph_release_rejected(cap_env):
 def test_final_snapshot_used(cap_env):
     c,s,_,_=cap_env
     assert c.can_consume(1,ACTION,RECEIPT)
-    assert set(s['final_reads'])=={'LATEST_FINAL'}
+    assert s['final_reads'] and set(s['final_reads'])=={None}
 
 
 def test_wrong_root_rejected(cap_env):

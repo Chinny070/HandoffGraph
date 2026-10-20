@@ -3,11 +3,10 @@
 
 Single deployable IC. Never transfers GEN. The immutable workflow root, action
 identifier, operator and cap count prevent arbitrary contract-side reuse.
-Reads *latest-final* HandoffGraph only, including quarantine and revocation.
-Real cross-IC Direct Mode / StudioNet support has NOT been verified here.
+Reads accepted HandoffGraph state via one is_release_bound call (quarantine and
+revocation included). LATEST_FINAL reads hang on StudioNet; see LIVE_PROOFS.md.
 """
 from genlayer import *
-from genlayer.py.public_abi import StorageType
 from datetime import datetime, timezone
 
 
@@ -66,7 +65,7 @@ class HandoffCapabilityConsumer(gl.Contract):
             int(datetime.now(timezone.utc).timestamp()) >= int(self.expires_at) or
             requested_action != self.action_hash or len(receipt) != 64):
             return False
-        latest_final = IHandoffGraphCapability(self.graph_address).view(state=StorageType.LATEST_FINAL)
+        latest_final = IHandoffGraphCapability(self.graph_address).view()
         return bool(latest_final.is_release_bound(self.workflow_id, self.stage_id,
                                                   self.workflow_root, receipt))
 

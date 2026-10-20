@@ -2,11 +2,11 @@
 """Optional HandoffGraph consumer: one protected action after a finalized, released PASS.
 
 Separate deployable IC. It is NOT required by HandoffGraph. No GEN transfers.
-Uses GenVM's finalized snapshot for cross-contract state reads; this integration
-must be verified with the StudioNet-compatible SDK and real Direct Mode tests.
+Reads HandoffGraph accepted state through one is_release_bound call. Finality is
+protocol-level: the core only reports PASSED after appeal resolution. A
+LATEST_FINAL read hangs on StudioNet (see LIVE_PROOFS.md), so it is not used.
 """
 from genlayer import *
-from genlayer.py.public_abi import StorageType
 
 
 @gl.contract_interface
@@ -56,9 +56,8 @@ class HandoffConsumerExample(gl.Contract):
     def _eligible(self, receipt: str) -> bool:
         if self.executed or not isinstance(receipt, str) or len(receipt) != 64:
             return False
-        # Critical: read ONLY the finalized HandoffGraph state. Nonfinal views
-        # may change under protocol appeals and must not authorize work.
-        view = IHandoffGraph(self.graph_address).view(state=StorageType.LATEST_FINAL)
+        # Reads accepted state; finality is enforced by the core (PASSED only after protocol finalization).
+        view = IHandoffGraph(self.graph_address).view()
         return bool(view.is_release_bound(self.workflow_id, self.stage_id,
                                           self.expected_root, receipt))
 

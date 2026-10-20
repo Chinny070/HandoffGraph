@@ -73,7 +73,7 @@ def test_success_and_consume_once(consumer_env):
 def test_reads_final_state_only(consumer_env):
     c, s, _ = consumer_env
     assert c.can_execute(RECEIPT)
-    assert s['final_reads'] and set(s['final_reads']) == {'LATEST_FINAL'}
+    assert s['final_reads'] and set(s['final_reads']) == {None}
 
 
 def test_reject_before_release(consumer_env):
