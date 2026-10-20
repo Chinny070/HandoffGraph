@@ -31,6 +31,14 @@ def consumer_env(monkeypatch):
         def get_decision(self, _id): return tests['graph']['decision']
         def is_release_active(self, _id, _receipt): return tests['graph'].get('active', True)
 
+        def is_release_bound(self, workflow_id, stage_id, root, receipt):
+            g = tests['graph']; w, s, d = g['workflow'], g['stage'], g['decision']
+            return bool(w['sealed'] and w['root'] == root and int(s['workflow_id']) == int(workflow_id)
+                and int(s['state']) == 6 and s['released'] and not s['quarantined'] and int(s['ruling']) == 1
+                and s['receipt'] == receipt and d['final'] and d['receipt'] == receipt
+                and int(d['stage_id']) == int(stage_id) and int(d['attempt']) == int(s['attempt'])
+                and d['submission_hash'] == s['submission_hash'] and tests.get('active', True))
+
     tests = state
     genlayer = types.ModuleType('genlayer')
     gl = types.SimpleNamespace(Contract=object, Event=type('Event', (), {'emit':lambda self:None}),

@@ -29,6 +29,14 @@ def cap_env(monkeypatch):
         def get_stage(self,_):return data['graph']['stage']
         def get_decision(self,_):return data['graph']['decision']
         def is_release_active(self,_,__):return data['active']
+
+        def is_release_bound(self, workflow_id, stage_id, root, receipt):
+            g = data['graph']; w, s, d = g['workflow'], g['stage'], g['decision']
+            return bool(w['sealed'] and w['root'] == root and int(s['workflow_id']) == int(workflow_id)
+                and int(s['state']) == 6 and s['released'] and not s['quarantined'] and int(s['ruling']) == 1
+                and s['receipt'] == receipt and d['final'] and d['receipt'] == receipt
+                and int(d['stage_id']) == int(stage_id) and int(d['attempt']) == int(s['attempt'])
+                and d['submission_hash'] == s['submission_hash'] and data.get('active', True))
     data=state
     class Event:
         def __init__(self,*args,**kwargs):pass

@@ -18,6 +18,8 @@ class IHandoffGraphCapability:
         def get_stage(self, stage_id: u256) -> dict: ...
         def get_decision(self, decision_id: u256) -> dict: ...
         def is_release_active(self, stage_id: u256, expected_receipt: str) -> bool: ...
+        def is_release_bound(self, workflow_id: u256, stage_id: u256, expected_root: str,
+                             expected_receipt: str) -> bool: ...
 
 
 class CapabilityConsumed(gl.Event):
@@ -64,22 +66,9 @@ class HandoffCapabilityConsumer(gl.Contract):
             int(datetime.now(timezone.utc).timestamp()) >= int(self.expires_at) or
             requested_action != self.action_hash or len(receipt) != 64):
             return False
-        g = IHandoffGraphCapability(self.graph_address)
-        latest_final = g.view(state=StorageType.LATEST_FINAL)
-        w = latest_final.get_workflow(self.workflow_id)
-        s = latest_final.get_stage(self.stage_id)
-        if (not w['sealed'] or w['root'] != self.workflow_root or
-            int(s['workflow_id']) != int(self.workflow_id) or
-            int(s['state']) != 6 or not s['released'] or s['quarantined'] or
-            s['receipt'] != receipt or int(s['ruling']) != 1 or
-            int(s['decision_id']) <= 0):
-            return False
-        d = latest_final.get_decision(u256(int(s['decision_id'])))
-        return bool(d['final'] and d['receipt'] == receipt and
-            int(d['stage_id']) == int(self.stage_id) and
-            int(d['attempt']) == int(s['attempt']) and
-            d['submission_hash'] == s['submission_hash'] and
-            latest_final.is_release_active(self.stage_id, receipt))
+        latest_final = IHandoffGraphCapability(self.graph_address).view(state=StorageType.LATEST_FINAL)
+        return bool(latest_final.is_release_bound(self.workflow_id, self.stage_id,
+                                                  self.workflow_root, receipt))
 
     @gl.public.view
     def can_consume(self, nonce: u256, requested_action: str, receipt: str) -> bool:

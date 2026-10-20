@@ -953,6 +953,21 @@ class HandoffGraph(gl.Contract):
             expected_receipt and len(expected_receipt) == 64 and s.receipt == expected_receipt and
             d.receipt == expected_receipt and self._deps_released(s))
 
+    @gl.public.view
+    def is_release_bound(self, workflow_id: u256, stage_id: u256, expected_root: str,
+                         expected_receipt: str) -> bool:
+        """Single-call consumer gate: workflow/root binding plus full release validity."""
+        s = self.stages.get(stage_id)
+        if s is None or int(s.workflow_id) != int(workflow_id):
+            return False
+        w = self._workflow(s.workflow_id)
+        d = self.decisions.get(s.decision_id)
+        if (not w.sealed or str(w.root) != expected_root or d is None or
+                int(d.stage_id) != int(stage_id) or int(d.attempt) != int(s.attempt) or
+                str(d.submission_hash) != str(s.submission_hash)):
+            return False
+        return self.is_release_active(stage_id, expected_receipt)
+
     @gl.public.write
     def open_counterexample(self, stage_id: u256, allegation: str, url: str, sha256: str) -> u256:
         """Quarantine pending independent scrutiny. Only independent reviewer/owner has standing."""

@@ -16,6 +16,8 @@ class IHandoffGraph:
         def get_stage(self, stage_id: u256) -> dict: ...
         def get_decision(self, decision_id: u256) -> dict: ...
         def is_release_active(self, stage_id: u256, expected_receipt: str) -> bool: ...
+        def is_release_bound(self, workflow_id: u256, stage_id: u256, expected_root: str,
+                             expected_receipt: str) -> bool: ...
     class Write:
         pass
 
@@ -56,22 +58,9 @@ class HandoffConsumerExample(gl.Contract):
             return False
         # Critical: read ONLY the finalized HandoffGraph state. Nonfinal views
         # may change under protocol appeals and must not authorize work.
-        target = IHandoffGraph(self.graph_address)
-        view = target.view(state=StorageType.LATEST_FINAL)
-        workflow = view.get_workflow(self.workflow_id)
-        stage = view.get_stage(self.stage_id)
-        if (not workflow['sealed'] or workflow['root'] != self.expected_root or
-            int(stage['workflow_id']) != int(self.workflow_id) or
-            int(stage['state']) != 6 or not stage['released'] or stage['quarantined'] or
-            int(stage['ruling']) != 1 or
-            stage['receipt'] != receipt or int(stage['decision_id']) <= 0):
-            return False
-        decision = view.get_decision(u256(int(stage['decision_id'])))
-        return bool(decision['final'] and decision['receipt'] == receipt and
-                    int(decision['stage_id']) == int(self.stage_id) and
-                    int(decision['attempt']) == int(stage['attempt']) and
-                    decision['submission_hash'] == stage['submission_hash'] and
-                    view.is_release_active(self.stage_id, receipt))
+        view = IHandoffGraph(self.graph_address).view(state=StorageType.LATEST_FINAL)
+        return bool(view.is_release_bound(self.workflow_id, self.stage_id,
+                                          self.expected_root, receipt))
 
     @gl.public.view
     def can_execute(self, receipt: str) -> bool:
