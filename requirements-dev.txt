@@ -1,0 +1,4 @@
+pytest>=8.2,<9
+# Install on developer workstation for REAL GenVM Direct Mode; this is NOT
+# required for the standalone offline compatibility tests.
+genlayer-test==0.29.0

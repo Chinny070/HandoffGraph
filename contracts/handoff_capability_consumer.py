@@ -1,0 +1,108 @@
+# { "Depends": "py-genlayer:1jb45aa8ynh2a9c9xn3b7qqh8sm5q93hwfp7jqmwsfhh8jpz09h6" }
+"""Optional bounded action-capability consumer for HandoffGraph v0.3.
+
+Single deployable IC. Never transfers GEN. The immutable workflow root, action
+identifier, operator and cap count prevent arbitrary contract-side reuse.
+Reads *latest-final* HandoffGraph only, including quarantine and revocation.
+Real cross-IC Direct Mode / StudioNet support has NOT been verified here.
+"""
+from genlayer import *
+from genlayer.py.public_abi import StorageType
+from datetime import datetime, timezone
+
+
+@gl.contract_interface
+class IHandoffGraphCapability:
+    class View:
+        def get_workflow(self, workflow_id: u256) -> dict: ...
+        def get_stage(self, stage_id: u256) -> dict: ...
+        def get_decision(self, decision_id: u256) -> dict: ...
+        def is_release_active(self, stage_id: u256, expected_receipt: str) -> bool: ...
+
+
+class CapabilityConsumed(gl.Event):
+    def __init__(self, nonce: u256, stage_id: u256, /, **kwargs): ...
+
+
+class HandoffCapabilityConsumer(gl.Contract):
+    graph_address: Address
+    workflow_id: u256
+    stage_id: u256
+    workflow_root: str
+    action_hash: str
+    operator: Address
+    expires_at: u256
+    max_uses: u32
+    use_count: u32
+    used: TreeMap[u256, bool]
+    last_receipt: str
+
+    def __init__(self, graph_address: Address, workflow_id: u256, stage_id: u256,
+                 workflow_root: str, action_hash: str, operator: Address,
+                 expires_at: u256, max_uses: u32):
+        if int(workflow_id) <= 0 or int(stage_id) <= 0:
+            raise gl.vm.UserError('BAD_IDS')
+        for value in (workflow_root, action_hash):
+            if len(value) != 64 or any(ch not in '0123456789abcdef' for ch in value):
+                raise gl.vm.UserError('BAD_COMMITMENT')
+        zero = str(Address('0x' + '00' * 20))
+        if str(graph_address) == zero or str(operator) == zero:
+            raise gl.vm.UserError('BAD_ADDRESS')
+        if not (1 <= int(max_uses) <= 32):
+            raise gl.vm.UserError('BAD_USAGE_BOUND')
+        if int(expires_at) <= int(datetime.now(timezone.utc).timestamp()):
+            raise gl.vm.UserError('BAD_EXPIRY')
+        self.graph_address, self.workflow_id, self.stage_id = graph_address, workflow_id, stage_id
+        self.workflow_root, self.action_hash = workflow_root, action_hash
+        self.operator, self.expires_at = operator, expires_at
+        self.max_uses, self.use_count = max_uses, u32(0)
+        self.last_receipt = ''
+
+    def _eligible(self, nonce: u256, requested_action: str, receipt: str) -> bool:
+        if (int(nonce) <= 0 or int(nonce) > 32 or self.used.get(nonce, False) or
+            int(self.use_count) >= int(self.max_uses) or
+            int(datetime.now(timezone.utc).timestamp()) >= int(self.expires_at) or
+            requested_action != self.action_hash or len(receipt) != 64):
+            return False
+        g = IHandoffGraphCapability(self.graph_address)
+        latest_final = g.view(state=StorageType.LATEST_FINAL)
+        w = latest_final.get_workflow(self.workflow_id)
+        s = latest_final.get_stage(self.stage_id)
+        if (not w['sealed'] or w['root'] != self.workflow_root or
+            int(s['workflow_id']) != int(self.workflow_id) or
+            int(s['state']) != 6 or not s['released'] or s['quarantined'] or
+            s['receipt'] != receipt or int(s['ruling']) != 1 or
+            int(s['decision_id']) <= 0):
+            return False
+        d = latest_final.get_decision(u256(int(s['decision_id'])))
+        return bool(d['final'] and d['receipt'] == receipt and
+            int(d['stage_id']) == int(self.stage_id) and
+            int(d['attempt']) == int(s['attempt']) and
+            d['submission_hash'] == s['submission_hash'] and
+            latest_final.is_release_active(self.stage_id, receipt))
+
+    @gl.public.view
+    def can_consume(self, nonce: u256, requested_action: str, receipt: str) -> bool:
+        try:
+            return self._eligible(nonce, requested_action, receipt)
+        except Exception:
+            return False
+
+    @gl.public.write
+    def consume(self, nonce: u256, requested_action: str, receipt: str):
+        if gl.message.sender_address != self.operator:
+            raise gl.vm.UserError('ONLY_OPERATOR')
+        if not self._eligible(nonce, requested_action, receipt):
+            raise gl.vm.UserError('CAPABILITY_INVALID')
+        self.used[nonce] = True
+        self.use_count = u32(int(self.use_count) + 1)
+        self.last_receipt = receipt
+        CapabilityConsumed(nonce, self.stage_id).emit()
+
+    @gl.public.view
+    def get_status(self) -> dict:
+        return {'graph_address': str(self.graph_address), 'workflow_id': int(self.workflow_id),
+            'stage_id': int(self.stage_id), 'workflow_root': self.workflow_root,
+            'action_hash': self.action_hash, 'operator': str(self.operator),
+            'expires_at': int(self.expires_at), 'max_uses': int(self.max_uses),
+            'use_count': int(self.use_count), 'last_receipt': str(self.last_receipt)}

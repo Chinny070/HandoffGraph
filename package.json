@@ -1,0 +1,13 @@
+{
+  "name": "handoffgraph-studionet-preflight",
+  "version": "0.3.0",
+  "private": true,
+  "description": "Local-only StudioNet CLI pin for standalone HandoffGraph",
+  "scripts": {
+    "assert:studionet": "node scripts/assert_studionet.mjs",
+    "cli:version": "genlayer --version"
+  },
+  "devDependencies": {
+    "genlayer": "0.39.1"
+  }
+}
