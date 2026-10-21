@@ -55,9 +55,11 @@ def consumer_env(monkeypatch):
         assert req['status'] == 'finalized'
         if state.get('web_exc'):
             raise RuntimeError('network down')
+        if 'rpc_raw' in state:
+            return types.SimpleNamespace(status=state.get('web_status', 200), body=state['rpc_raw'])
         payload = _json.dumps(state.get('final_bound', True)).encode().hex()
         return types.SimpleNamespace(status=state.get('web_status', 200),
-                                     body=_json.dumps({'result': payload}).encode())
+                                     body=_json.dumps({'jsonrpc': '2.0', 'id': 1, 'result': payload}).encode())
     gl.nondet = types.SimpleNamespace(web=types.SimpleNamespace(post=_post))
     gl.eq_principle = types.SimpleNamespace(strict_eq=lambda fn: fn())
     calldata_mod = types.SimpleNamespace(
@@ -173,3 +175,59 @@ def test_finalized_gate_fails_closed_on_rpc_errors(consumer_env, field):
     s.pop(field)
     c.execute_once(RECEIPT)
     assert c.get_status()['action_count'] == 1
+
+
+import json as _j
+
+
+def _hex(value):
+    return _j.dumps(value).encode().hex()
+
+
+def _env(**kw):
+    base = {'jsonrpc': '2.0', 'id': 1, 'result': _hex(True)}
+    base.update(kw)
+    return _j.dumps(base).encode()
+
+
+DISHONEST = [
+    b'not json',
+    b'[]',
+    _env(error={'code': -1, 'message': 'x'}),
+    _env(id=2),
+    _env(jsonrpc='1.0'),
+    _env(extra='field'),
+    _env(result=_hex(1)),
+    _env(result=_hex('true')),
+    _env(result=_hex(None)),
+    _env(result='zz'),
+    _env(result=12345),
+    _env(result='00' * 40),
+    _env(result=_hex(False)),
+    b'x' * 5000,
+    b'',
+]
+
+
+@pytest.mark.parametrize('raw', DISHONEST)
+def test_dishonest_or_malformed_rpc_never_authorizes(consumer_env, raw):
+    c, s, _ = consumer_env
+    s['rpc_raw'] = raw
+    with pytest.raises(ValueError, match='HANDOFF_NOT_RELEASED'):
+        c.execute_once(RECEIPT)
+    assert c.get_status()['action_count'] == 0
+
+
+def test_dishonest_yes_cannot_override_accepted_state_denial(consumer_env):
+    c, s, _ = consumer_env
+    s['graph']['stage']['quarantined'] = True       # accepted state says quarantined
+    s['final_bound'] = True                         # lying RPC says finalized and bound
+    with pytest.raises(ValueError, match='HANDOFF_NOT_RELEASED'):
+        c.execute_once(RECEIPT)
+    assert c.get_status()['action_count'] == 0
+
+
+def test_status_discloses_rpc_trust(consumer_env):
+    c, s, _ = consumer_env
+    st = c.get_status()
+    assert st['trustless_finality'] is False and 'RPC' in st['finality_model']

@@ -5,12 +5,20 @@ Separate deployable IC. It is NOT required by HandoffGraph. No GEN transfers.
 can_execute is an accepted-state advisory view. execute_once requires BOTH the accepted-state
 gate (catches fresh quarantine) and a FINALIZED-state gate fetched by every validator from the
 StudioNet RPC (LATEST_FINAL cross-contract reads hang on StudioNet; see LIVE_PROOFS.md).
+
+TRUST LIMITATION: finality here is NOT trustless. Native LATEST_FINAL reads hang on StudioNet, so the
+finalized-state gate trusts the StudioNet RPC endpoint (every validator queries the same service).
+A dishonest endpoint can only DENY (the accepted-state gate is still required) or fall back to
+accepted-state protection; it cannot authorize anything the accepted-state gate denies. Do not use
+this example to authorize irreversible actions where RPC trust is unacceptable.
 """
 from genlayer import *
 from genlayer.py import calldata
 import json
 
 STUDIONET_RPC = 'https://studio.genlayer.com/api'
+FINALITY_MODEL = 'ACCEPTED_STATE_PLUS_STUDIONET_RPC_FINALITY'
+TRUSTLESS_FINALITY = False
 
 
 @gl.contract_interface
@@ -86,8 +94,12 @@ class HandoffConsumerExample(gl.Contract):
                                        headers={'content-type': 'application/json', 'user-agent': 'curl/8.0'})
                 if r.status != 200 or r.body is None or len(r.body) > 4096:
                     return False
-                result = json.loads(r.body.decode('utf-8')).get('result')
-                if not isinstance(result, str):
+                envelope = json.loads(r.body.decode('utf-8'))
+                if (not isinstance(envelope, dict) or envelope.get('jsonrpc') != '2.0' or
+                        envelope.get('id') != 1 or 'error' in envelope or set(envelope.keys()) != {'jsonrpc', 'id', 'result'}):
+                    return False
+                result = envelope['result']
+                if not isinstance(result, str) or len(result) > 64:
                     return False
                 return calldata.decode(bytes.fromhex(result)) is True
             except Exception:
@@ -121,4 +133,5 @@ class HandoffConsumerExample(gl.Contract):
                 'workflow_id': int(self.workflow_id), 'stage_id': int(self.stage_id),
                 'expected_root': self.expected_root,
                 'operator': str(self.operator), 'executed': bool(self.executed),
-                'receipt': self.accepted_receipt, 'action_count': int(self.action_count)}
+                'receipt': self.accepted_receipt, 'action_count': int(self.action_count),
+                'finality_model': FINALITY_MODEL, 'trustless_finality': TRUSTLESS_FINALITY}

@@ -6,6 +6,12 @@ identifier, operator and cap count prevent arbitrary contract-side reuse.
 can_consume is an accepted-state advisory view. consume requires BOTH the accepted-state gate
 and a FINALIZED-state gate fetched by every validator from the StudioNet RPC (LATEST_FINAL
 cross-contract reads hang on StudioNet; see LIVE_PROOFS.md).
+
+TRUST LIMITATION: finality here is NOT trustless. Native LATEST_FINAL reads hang on StudioNet, so the
+finalized-state gate trusts the StudioNet RPC endpoint (every validator queries the same service).
+A dishonest endpoint can only DENY (the accepted-state gate is still required) or fall back to
+accepted-state protection; it cannot authorize anything the accepted-state gate denies. Do not use
+this example to authorize irreversible actions where RPC trust is unacceptable.
 """
 from genlayer import *
 from genlayer.py import calldata
@@ -13,6 +19,8 @@ import json
 from datetime import datetime, timezone
 
 STUDIONET_RPC = 'https://studio.genlayer.com/api'
+FINALITY_MODEL = 'ACCEPTED_STATE_PLUS_STUDIONET_RPC_FINALITY'
+TRUSTLESS_FINALITY = False
 
 
 @gl.contract_interface
@@ -95,8 +103,12 @@ class HandoffCapabilityConsumer(gl.Contract):
                                        headers={'content-type': 'application/json', 'user-agent': 'curl/8.0'})
                 if r.status != 200 or r.body is None or len(r.body) > 4096:
                     return False
-                result = json.loads(r.body.decode('utf-8')).get('result')
-                if not isinstance(result, str):
+                envelope = json.loads(r.body.decode('utf-8'))
+                if (not isinstance(envelope, dict) or envelope.get('jsonrpc') != '2.0' or
+                        envelope.get('id') != 1 or 'error' in envelope or set(envelope.keys()) != {'jsonrpc', 'id', 'result'}):
+                    return False
+                result = envelope['result']
+                if not isinstance(result, str) or len(result) > 64:
                     return False
                 return calldata.decode(bytes.fromhex(result)) is True
             except Exception:
@@ -128,4 +140,5 @@ class HandoffCapabilityConsumer(gl.Contract):
             'stage_id': int(self.stage_id), 'workflow_root': self.workflow_root,
             'action_hash': self.action_hash, 'operator': str(self.operator),
             'expires_at': int(self.expires_at), 'max_uses': int(self.max_uses),
-            'use_count': int(self.use_count), 'last_receipt': str(self.last_receipt)}
+            'use_count': int(self.use_count), 'last_receipt': str(self.last_receipt),
+            'finality_model': FINALITY_MODEL, 'trustless_finality': TRUSTLESS_FINALITY}

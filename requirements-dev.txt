@@ -1,4 +1,4 @@
-pytest>=8.2,<9
-# Install on developer workstation for REAL GenVM Direct Mode; this is NOT
-# required for the standalone offline compatibility tests.
-genlayer-test==0.29.0
+# Versions this repository was verified against (Windows 11, Python 3.12).
+pytest>=8.2
+genlayer-test==0.29.2
+genvm-linter==0.11.1rc2
