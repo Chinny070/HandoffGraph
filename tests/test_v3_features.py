@@ -389,3 +389,14 @@ def test_counter_substantive_unknown_fails_closed(env,cast):
     assert env[1].get_counterexample(cid)['status']==env[0].COUNTER_INCONCLUSIVE
     assert env[1].get_stage(s)['state']==env[0].FAILED
     assert env[1].get_stage(s)['quarantined'] and not env[1].is_release_active(s,r)
+
+
+def test_counter_attempts_are_bounded(env,cast):
+    w,s,d=make(env,cast);r=complete(env,cast,s)
+    cast(REVIEWER)
+    for _ in range(3):
+        cid=env[1].open_counterexample(s,'Unverifiable',ARTIFACT_URL,'e'*64)
+        env[1].resolve_counterexample(cid)
+    with pytest.raises(Exception,match='COUNTER_ATTEMPTS_EXHAUSTED'):
+        env[1].open_counterexample(s,'Unverifiable again',ARTIFACT_URL,'e'*64)
+    assert env[1].is_release_active(s,r)

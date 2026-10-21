@@ -893,3 +893,17 @@ def test_is_release_bound_gate(w):
     assert not w.c.is_release_bound(wf, s + 99, root, rc)
     w.c.freeze(wf)
     assert not w.c.is_release_bound(wf, s, root, rc)
+
+
+def test_counter_attempts_exhausted_real_runtime(w):
+    wf, (s,) = w.build()
+    rc = w.release_pass(s)
+    w.vm.mock_web(re.escape(BASE + 'defect.md'), {'status': 404, 'body': ''})
+    for _ in range(3):
+        with w.as_(w.reviewer):
+            cid = w.c.open_counterexample(s, 'unverifiable', BASE + 'defect.md', 'e' * 64)
+        w.c.resolve_counterexample(cid)
+    with w.as_(w.reviewer):
+        with w.vm.expect_revert('COUNTER_ATTEMPTS_EXHAUSTED'):
+            w.c.open_counterexample(s, 'again', BASE + 'defect.md', 'e' * 64)
+    assert w.c.is_release_active(s, rc)

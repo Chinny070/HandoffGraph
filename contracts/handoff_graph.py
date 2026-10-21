@@ -23,6 +23,7 @@ APPEAL_SECONDS = 24 * 3600
 FREEZE_SECONDS = 24 * 3600
 MAX_FREEZES = 2
 MAX_ATTEMPTS = 3
+MAX_COUNTER_ATTEMPTS = 3
 MAX_REQUIREMENTS = 6
 COUNTER_WINDOW_SECONDS = 7 * 24 * 3600
 COUNTER_RESOLVE_SECONDS = 2 * 24 * 3600
@@ -294,6 +295,7 @@ class Stage:
     quarantined: bool
     revocation_hash: str
     counter_id: u256
+    counter_attempts: u32
 
 
 @allow_storage
@@ -590,7 +592,7 @@ class HandoffGraph(gl.Contract):
             (workflow_id, worker, reviewer, name, criterion, deps,
              u8(READY), u32(0), '', '', '', '', '', '', u256(0), u256(0),
              u8(UNKNOWN), u256(0), False, '', [], u256(0), u256(0),
-             '', '', '', '', u256(0), False, '', u256(0)))
+             '', '', '', '', u256(0), False, '', u256(0), u32(0)))
         w.stage_ids.append(stage_id)
         return stage_id
 
@@ -977,6 +979,7 @@ class HandoffGraph(gl.Contract):
         require(gl.message.sender_address in (s.reviewer, w.owner), 'NO_COUNTER_STANDING')
         require(clock() < int(s.released_at) + COUNTER_WINDOW_SECONDS, 'COUNTER_WINDOW_CLOSED')
         require(int(s.counter_id) == 0, 'COUNTER_ALREADY_USED')
+        require(int(s.counter_attempts) < MAX_COUNTER_ATTEMPTS, 'COUNTER_ATTEMPTS_EXHAUSTED')
         allegation = bounded(allegation, MAX_EVIDENCE, 'BAD_COUNTEREVIDENCE')
         require(pinned_source(url, sha256), 'INVALID_PINNED_SOURCE')
         cid = self.next_counter
@@ -985,6 +988,7 @@ class HandoffGraph(gl.Contract):
             gl.message.sender_address, allegation, url, sha256, u256(clock()),
             u8(COUNTER_PENDING), u8(UNKNOWN), '', u256(0), ''))
         s.counter_id = cid
+        s.counter_attempts = u32(int(s.counter_attempts) + 1)
         s.quarantined = True
         return cid
 
@@ -1131,6 +1135,7 @@ class HandoffGraph(gl.Contract):
         s.receipt, s.revocation_hash = '', ''
         s.delivery_deadline = u256(clock() + int(s.delivery_timeout)) if s.delivery_timeout and not s.dependencies else u256(0)
         s.counter_id = u256(0)
+        s.counter_attempts = u32(0)
         # No previous Decision record is modified.
 
     @gl.public.write
