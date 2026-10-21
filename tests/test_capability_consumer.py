@@ -48,6 +48,23 @@ def cap_env(monkeypatch):
         message=types.SimpleNamespace(sender_address=USER),
         contract_interface=lambda _:lambda address:Proxy())
     fake.gl=gl
+
+    import json as _json
+    def _post(url, body=None, headers=None):
+        assert url == 'https://studio.genlayer.com/api'
+        req = _json.loads(body)['params'][0]
+        assert req['status'] == 'finalized'
+        if state.get('web_exc'):
+            raise RuntimeError('network down')
+        payload = _json.dumps(state.get('final_bound', True)).encode().hex()
+        return types.SimpleNamespace(status=state.get('web_status', 200),
+                                     body=_json.dumps({'result': payload}).encode())
+    gl.nondet = types.SimpleNamespace(web=types.SimpleNamespace(post=_post))
+    gl.eq_principle = types.SimpleNamespace(strict_eq=lambda fn: fn())
+    calldata_mod = types.SimpleNamespace(
+        encode=lambda d: _json.dumps(d).encode(), decode=lambda b: _json.loads(b))
+    py_mod=types.ModuleType('genlayer.py')
+    py_mod.calldata=calldata_mod
     fake.Address=str
     fake.u256=int
     fake.u32=int
@@ -55,7 +72,7 @@ def cap_env(monkeypatch):
     abi=types.ModuleType('genlayer.py.public_abi')
     abi.StorageType=types.SimpleNamespace(LATEST_FINAL='LATEST_FINAL')
     monkeypatch.setitem(sys.modules,'genlayer',fake)
-    monkeypatch.setitem(sys.modules,'genlayer.py',types.ModuleType('genlayer.py'))
+    monkeypatch.setitem(sys.modules,'genlayer.py',py_mod)
     monkeypatch.setitem(sys.modules,'genlayer.py.public_abi',abi)
     spec=importlib.util.spec_from_file_location('handoff_capability_consumer',SOURCE)
     module=importlib.util.module_from_spec(spec)
@@ -151,3 +168,23 @@ def test_max_uses_constructor(cap_env):
     c,s,_,module=cap_env
     with pytest.raises(ValueError,match='BAD_USAGE_BOUND'):
         module.HandoffCapabilityConsumer(GRAPH,1,3,ROOT,ACTION,USER,1900000100,33)
+
+
+def test_finalized_gate_blocks_consume_even_if_accepted_state_looks_good(cap_env):
+    c,s,_,_=cap_env
+    s['final_bound']=False
+    assert c.can_consume(1,ACTION,RECEIPT)
+    with pytest.raises(ValueError,match='CAPABILITY_INVALID'):
+        c.consume(1,ACTION,RECEIPT)
+    assert c.get_status()['use_count']==0
+
+
+def test_finalized_gate_fails_closed_on_rpc_error(cap_env):
+    c,s,_,_=cap_env
+    s['web_exc']=True
+    with pytest.raises(ValueError,match='CAPABILITY_INVALID'):
+        c.consume(1,ACTION,RECEIPT)
+    s.pop('web_exc')
+    c.consume(1,ACTION,RECEIPT)
+    with pytest.raises(ValueError,match='CAPABILITY_INVALID'):
+        c.consume(1,ACTION,RECEIPT)

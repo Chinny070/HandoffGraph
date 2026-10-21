@@ -3,11 +3,16 @@
 
 Single deployable IC. Never transfers GEN. The immutable workflow root, action
 identifier, operator and cap count prevent arbitrary contract-side reuse.
-Reads accepted HandoffGraph state via one is_release_bound call (quarantine and
-revocation included). LATEST_FINAL reads hang on StudioNet; see LIVE_PROOFS.md.
+can_consume is an accepted-state advisory view. consume requires BOTH the accepted-state gate
+and a FINALIZED-state gate fetched by every validator from the StudioNet RPC (LATEST_FINAL
+cross-contract reads hang on StudioNet; see LIVE_PROOFS.md).
 """
 from genlayer import *
+from genlayer.py import calldata
+import json
 from datetime import datetime, timezone
+
+STUDIONET_RPC = 'https://studio.genlayer.com/api'
 
 
 @gl.contract_interface
@@ -69,6 +74,36 @@ class HandoffCapabilityConsumer(gl.Contract):
         return bool(latest_final.is_release_bound(self.workflow_id, self.stage_id,
                                                   self.workflow_root, receipt))
 
+
+    def _finalized_bound(self, receipt: str) -> bool:
+        """True only if the StudioNet RPC reports the release as bound in FINALIZED state.
+
+        gl LATEST_FINAL cross-contract reads hang on StudioNet, so each validator instead
+        fetches a finalized gen_call from the RPC; strict equality means every validator
+        must observe the identical boolean. Any error or mismatch fails closed.
+        """
+        graph = str(self.graph_address)
+        payload = calldata.encode({'method': 'is_release_bound',
+                                   'args': [int(self.workflow_id), int(self.stage_id), self.workflow_root, receipt]})
+        body = json.dumps({'jsonrpc': '2.0', 'id': 1, 'method': 'gen_call', 'params': [{
+            'type': 'read', 'to': graph, 'from': '0x' + '00' * 20,
+            'data': '0x' + payload.hex(), 'status': 'finalized'}]})
+
+        def fetch() -> bool:
+            try:
+                r = gl.nondet.web.post(STUDIONET_RPC, body=body,
+                                       headers={'content-type': 'application/json', 'user-agent': 'curl/8.0'})
+                if r.status != 200 or r.body is None or len(r.body) > 4096:
+                    return False
+                result = json.loads(r.body.decode('utf-8')).get('result')
+                if not isinstance(result, str):
+                    return False
+                return calldata.decode(bytes.fromhex(result)) is True
+            except Exception:
+                return False
+
+        return bool(gl.eq_principle.strict_eq(fetch))
+
     @gl.public.view
     def can_consume(self, nonce: u256, requested_action: str, receipt: str) -> bool:
         try:
@@ -80,7 +115,7 @@ class HandoffCapabilityConsumer(gl.Contract):
     def consume(self, nonce: u256, requested_action: str, receipt: str):
         if gl.message.sender_address != self.operator:
             raise gl.vm.UserError('ONLY_OPERATOR')
-        if not self._eligible(nonce, requested_action, receipt):
+        if not self._eligible(nonce, requested_action, receipt) or not self._finalized_bound(receipt):
             raise gl.vm.UserError('CAPABILITY_INVALID')
         self.used[nonce] = True
         self.use_count = u32(int(self.use_count) + 1)

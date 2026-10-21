@@ -2,11 +2,15 @@
 """Optional HandoffGraph consumer: one protected action after a finalized, released PASS.
 
 Separate deployable IC. It is NOT required by HandoffGraph. No GEN transfers.
-Reads HandoffGraph accepted state through one is_release_bound call. Finality is
-protocol-level: the core only reports PASSED after appeal resolution. A
-LATEST_FINAL read hangs on StudioNet (see LIVE_PROOFS.md), so it is not used.
+can_execute is an accepted-state advisory view. execute_once requires BOTH the accepted-state
+gate (catches fresh quarantine) and a FINALIZED-state gate fetched by every validator from the
+StudioNet RPC (LATEST_FINAL cross-contract reads hang on StudioNet; see LIVE_PROOFS.md).
 """
 from genlayer import *
+from genlayer.py import calldata
+import json
+
+STUDIONET_RPC = 'https://studio.genlayer.com/api'
 
 
 @gl.contract_interface
@@ -61,6 +65,36 @@ class HandoffConsumerExample(gl.Contract):
         return bool(view.is_release_bound(self.workflow_id, self.stage_id,
                                           self.expected_root, receipt))
 
+
+    def _finalized_bound(self, receipt: str) -> bool:
+        """True only if the StudioNet RPC reports the release as bound in FINALIZED state.
+
+        gl LATEST_FINAL cross-contract reads hang on StudioNet, so each validator instead
+        fetches a finalized gen_call from the RPC; strict equality means every validator
+        must observe the identical boolean. Any error or mismatch fails closed.
+        """
+        graph = str(self.graph_address)
+        payload = calldata.encode({'method': 'is_release_bound',
+                                   'args': [int(self.workflow_id), int(self.stage_id), self.expected_root, receipt]})
+        body = json.dumps({'jsonrpc': '2.0', 'id': 1, 'method': 'gen_call', 'params': [{
+            'type': 'read', 'to': graph, 'from': '0x' + '00' * 20,
+            'data': '0x' + payload.hex(), 'status': 'finalized'}]})
+
+        def fetch() -> bool:
+            try:
+                r = gl.nondet.web.post(STUDIONET_RPC, body=body,
+                                       headers={'content-type': 'application/json', 'user-agent': 'curl/8.0'})
+                if r.status != 200 or r.body is None or len(r.body) > 4096:
+                    return False
+                result = json.loads(r.body.decode('utf-8')).get('result')
+                if not isinstance(result, str):
+                    return False
+                return calldata.decode(bytes.fromhex(result)) is True
+            except Exception:
+                return False
+
+        return bool(gl.eq_principle.strict_eq(fetch))
+
     @gl.public.view
     def can_execute(self, receipt: str) -> bool:
         try:
@@ -74,7 +108,7 @@ class HandoffConsumerExample(gl.Contract):
             raise gl.vm.UserError('ONLY_OPERATOR')
         if self.executed:
             raise gl.vm.UserError('ALREADY_EXECUTED')
-        if not self._eligible(receipt):
+        if not self._eligible(receipt) or not self._finalized_bound(receipt):
             raise gl.vm.UserError('HANDOFF_NOT_RELEASED')
         self.executed = True
         self.accepted_receipt = receipt

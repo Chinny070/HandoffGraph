@@ -370,3 +370,22 @@ def test_delivery_timeout_recovery_for_unsubmitted(env,cast):
     cast(WORKER)
     env[1].retry_failed(s)
     assert env[1].can_submit(s)
+
+
+def test_counter_source_unavailable_frees_slot_and_can_reopen(env,cast):
+    w,s,d=make(env,cast);r=complete(env,cast,s)
+    cast(REVIEWER);cid=env[1].open_counterexample(s,'Invalid source',ARTIFACT_URL,'e'*64)
+    env[1].resolve_counterexample(cid)
+    assert env[1].is_release_active(s,r)
+    cid2=env[1].open_counterexample(s,'Retry with valid source',ARTIFACT_URL,ARTIFACT_SHA)
+    assert cid2!=cid and not env[1].is_release_active(s,r)
+
+
+def test_counter_substantive_unknown_fails_closed(env,cast):
+    w,s,d=make(env,cast);r=complete(env,cast,s)
+    cast(REVIEWER);cid=env[1].open_counterexample(s,'Ambiguous',ARTIFACT_URL,ARTIFACT_SHA)
+    env[2]['script']=[decision('UNKNOWN','UNVERIFIABLE',True,'CANNOT_DECIDE')]
+    env[1].resolve_counterexample(cid)
+    assert env[1].get_counterexample(cid)['status']==env[0].COUNTER_INCONCLUSIVE
+    assert env[1].get_stage(s)['state']==env[0].FAILED
+    assert env[1].get_stage(s)['quarantined'] and not env[1].is_release_active(s,r)

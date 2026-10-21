@@ -1012,9 +1012,20 @@ class HandoffGraph(gl.Contract):
             s.ruling = u8(result['decision'])
             # Preserve original receipt and released flag for historical audit,
             # but invalidate effective capability via state/quarantine checks.
-        else:
+        elif result['gap'] == 'SOURCE_UNAVAILABLE':
+            # A fetch/hash failure proves nothing either way: lift this quarantine but free the
+            # single slot so the reviewer can reopen with a source that actually verifies.
             c.status = u8(COUNTER_INCONCLUSIVE)
             s.quarantined = False
+            s.counter_id = u256(0)
+        else:
+            # Substantive UNKNOWN (model cannot decide on verified sources) fails closed like expiry.
+            c.status = u8(COUNTER_INCONCLUSIVE)
+            s.quarantined = True
+            s.state = u8(FAILED)
+            s.ruling = u8(UNKNOWN)
+            s.revocation_hash = digest({'case': int(case_id), 'previous': str(c.previous_receipt),
+                                        'inconclusive': True})
         c.resolved_at = u256(clock())
         c.resolution_receipt = digest({'case': int(case_id), 'status': int(c.status),
             'verdict': int(c.verdict), 'previous': str(c.previous_receipt),

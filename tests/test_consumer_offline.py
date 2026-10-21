@@ -47,10 +47,27 @@ def consumer_env(monkeypatch):
         contract_interface=lambda _: lambda address: Proxy(),
         message=types.SimpleNamespace(sender_address=OPERATOR))
     genlayer.gl, genlayer.Address, genlayer.u256, genlayer.u32 = gl, str, int, int
+
+    import json as _json
+    def _post(url, body=None, headers=None):
+        assert url == 'https://studio.genlayer.com/api'
+        req = _json.loads(body)['params'][0]
+        assert req['status'] == 'finalized'
+        if state.get('web_exc'):
+            raise RuntimeError('network down')
+        payload = _json.dumps(state.get('final_bound', True)).encode().hex()
+        return types.SimpleNamespace(status=state.get('web_status', 200),
+                                     body=_json.dumps({'result': payload}).encode())
+    gl.nondet = types.SimpleNamespace(web=types.SimpleNamespace(post=_post))
+    gl.eq_principle = types.SimpleNamespace(strict_eq=lambda fn: fn())
+    calldata_mod = types.SimpleNamespace(
+        encode=lambda d: _json.dumps(d).encode(), decode=lambda b: _json.loads(b))
+    py_mod = types.ModuleType('genlayer.py')
+    py_mod.calldata = calldata_mod
     public_abi = types.ModuleType('genlayer.py.public_abi')
     public_abi.StorageType = types.SimpleNamespace(LATEST_FINAL='LATEST_FINAL')
     monkeypatch.setitem(sys.modules, 'genlayer', genlayer)
-    monkeypatch.setitem(sys.modules, 'genlayer.py', types.ModuleType('genlayer.py'))
+    monkeypatch.setitem(sys.modules, 'genlayer.py', py_mod)
     monkeypatch.setitem(sys.modules, 'genlayer.py.public_abi', public_abi)
     spec = importlib.util.spec_from_file_location('handoff_consumer_example', SOURCE)
     module = importlib.util.module_from_spec(spec)
@@ -136,3 +153,23 @@ def test_view_returns_false_on_unavailable_source(consumer_env):
     c, s, _ = consumer_env
     del s['graph']['decision']['final']
     assert c.can_execute(RECEIPT) is False
+
+
+def test_finalized_gate_blocks_even_if_accepted_state_looks_good(consumer_env):
+    c, s, _ = consumer_env
+    s['final_bound'] = False
+    assert c.can_execute(RECEIPT)                      # advisory accepted-state view only
+    with pytest.raises(ValueError, match='HANDOFF_NOT_RELEASED'):
+        c.execute_once(RECEIPT)
+    assert c.get_status()['action_count'] == 0
+
+
+@pytest.mark.parametrize('field', ['web_exc', 'web_status'])
+def test_finalized_gate_fails_closed_on_rpc_errors(consumer_env, field):
+    c, s, _ = consumer_env
+    s[field] = True if field == 'web_exc' else 503
+    with pytest.raises(ValueError, match='HANDOFF_NOT_RELEASED'):
+        c.execute_once(RECEIPT)
+    s.pop(field)
+    c.execute_once(RECEIPT)
+    assert c.get_status()['action_count'] == 1
