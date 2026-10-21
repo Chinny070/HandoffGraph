@@ -343,7 +343,7 @@ def test_validator_rejects_malicious_leader(env,cast):
 
 
 def decision_as_norm(m):
-    return {'decision':m.PASS,'coverage':m.COMPLETE,'risk':False,'gap':'NONE','explanation':'valid'}
+    return {'decision':m.PASS,'coverage':m.COMPLETE,'risk':False,'gap':'NONE','explanation':'valid','source_ok':True}
 
 
 def test_validator_agree_then_falsification_accepts(env,cast):

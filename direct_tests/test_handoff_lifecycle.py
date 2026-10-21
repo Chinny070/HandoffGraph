@@ -907,3 +907,168 @@ def test_counter_attempts_exhausted_real_runtime(w):
         with w.vm.expect_revert('COUNTER_ATTEMPTS_EXHAUSTED'):
             w.c.open_counterexample(s, 'again', BASE + 'defect.md', 'e' * 64)
     assert w.c.is_release_active(s, rc)
+
+
+# ---------------------------------------------------------------- malicious leader: source-availability substitution
+
+def unavailable_claim(source_ok=False, gap='SOURCE_UNAVAILABLE', decision=UNKNOWN):
+    return {'decision': decision, 'coverage': 4, 'risk': True, 'gap': gap,
+            'explanation': 'leader says the source was unavailable', 'source_ok': source_ok}
+
+
+def test_leader_cannot_claim_source_unavailable_when_sources_verify(w):
+    wf, (s,) = w.build(requirements=False)
+    w.submit(s)
+    w.llm(judge=JUDGE_UNKNOWN)                    # the model itself is genuinely undecided
+    w.challenge_and_assess(s)
+    assert w.vm.run_validator(index=-1) is True   # honest UNKNOWN (source_ok True) is fine
+    for forged_claim in (unavailable_claim(False), unavailable_claim(True),
+                         unavailable_claim(False, gap='OTHER')):
+        assert w.vm.run_validator(leader_result=forged_claim, index=-1) is False
+
+
+def test_leader_result_without_source_ok_is_rejected(w):
+    wf, (s,) = w.build(requirements=False)
+    w.submit(s)
+    w.llm(judge=JUDGE_PASS)
+    w.challenge_and_assess(s)
+    legacy = {'decision': PASS, 'coverage': 1, 'risk': False, 'gap': 'NONE', 'explanation': 'x'}
+    assert w.vm.run_validator(leader_result=legacy, index=-1) is False
+    assert w.vm.run_validator(leader_result=dict(legacy, source_ok='yes'), index=-1) is False
+
+
+def test_leader_cannot_claim_source_ok_when_validator_cannot_fetch(w):
+    wf, (s,) = w.build(requirements=False)
+    w.submit(s)
+    w.llm(judge=JUDGE_PASS)
+    w.challenge_and_assess(s)
+    honest = dict(forged('PASS'), source_ok=True)
+    assert w.vm.run_validator(leader_result=honest, index=-1) is True
+    w.vm.mock_web(re.escape(BASE + 'ok.md'), {'status': 503, 'body': ''})
+    w.vm._web_mocks.insert(0, w.vm._web_mocks.pop())   # newest mock wins for the validator re-fetch
+    assert w.vm.run_validator(leader_result=honest, index=-1) is False
+    assert w.vm.run_validator(leader_result=unavailable_claim(False), index=-1) is True
+
+
+def test_model_cannot_smuggle_reserved_gap(w):
+    wf, (s,) = w.build(requirements=False)
+    w.submit(s)
+    w.llm(judge=dict(JUDGE_UNKNOWN, gap='SOURCE_UNAVAILABLE'))
+    w.challenge_and_assess(s)
+    d = w.c.get_decision(w.c.get_stage(s)['decision_id'])
+    assert d['gap'] != 'SOURCE_UNAVAILABLE'
+
+
+def test_counterexample_slot_not_freed_by_model_claimed_unavailability(w):
+    wf, (s,) = w.build(requirements=False)
+    rc = w.release_pass(s)
+    cid = open_cx(w, s)
+    w.llm(judge=dict(JUDGE_UNKNOWN, gap='SOURCE_UNAVAILABLE'))
+    w.c.resolve_counterexample(cid)               # sources verified, so this is a substantive UNKNOWN
+    st = w.c.get_stage(s)
+    assert st['state'] == FAILED and st['quarantined'] and st['counter_id'] == cid
+    assert not w.c.is_release_active(s, rc)
+
+
+def test_counterexample_malicious_leader_unavailability_rejected_by_validator(w):
+    wf, (s,) = w.build(requirements=False)
+    w.release_pass(s)
+    cid = open_cx(w, s)
+    w.llm(judge=JUDGE_FAIL)
+    w.c.resolve_counterexample(cid)
+    assert w.vm.run_validator(leader_result=unavailable_claim(False), index=-1) is False
+
+
+# ---------------------------------------------------------------- descendants bound to prerequisite receipts
+
+def sustain_and_repair_parent(w, parent):
+    """Counterexample sustained on the parent, then repaired and re-released with a new receipt."""
+    cid = open_cx(w, parent, name='defect-%d.md' % w.now, body='defect %d' % w.now)
+    w.llm(judge=JUDGE_FAIL)
+    w.c.resolve_counterexample(cid)
+    with w.as_(w.worker):
+        w.c.submit_repair(parent, 'Repaired upstream output.')
+    w.provisional(parent)
+    rc = w.finalize_by_appeal(parent)
+    w.c.release(parent, rc)
+    return rc
+
+
+def test_released_descendant_goes_inactive_after_upstream_repair_and_must_revalidate(w):
+    wf, (a, b) = w.build(stages=2, chain=True)
+    rc_a = w.release_pass(a)
+    rc_b = w.release_pass(b)
+    assert w.c.is_release_active(b, rc_b) and w.c.get_stage(b)['prerequisites_current']
+    rc_a2 = sustain_and_repair_parent(w, a)
+    assert rc_a2 != rc_a and w.c.is_release_active(a, rc_a2)
+    # parent is healthy again, but the descendant's decision was made against the old parent receipt
+    assert not w.c.get_stage(b)['prerequisites_current']
+    assert not w.c.is_release_active(b, rc_b)
+    with w.vm.expect_revert('STALE_PREREQUISITE'):
+        w.c.release(b, rc_b)
+    root = w.c.get_workflow(wf)['root']
+    assert not w.c.is_release_bound(wf, b, root, rc_b)
+    w.c.invalidate_stale(b)
+    assert w.state(b) == FAILED and len(w.c.get_stage(b)['revocation_hash']) == 64
+    with w.vm.expect_revert('NOT_INVALIDATABLE'):
+        w.c.invalidate_stale(b)
+    with w.as_(w.worker):
+        w.c.submit_repair(b, 'Re-validated against the repaired upstream receipt.')
+    w.provisional(b)
+    rc_b2 = w.finalize_by_appeal(b)
+    w.c.release(b, rc_b2)
+    assert rc_b2 != rc_b and w.c.is_release_active(b, rc_b2) and not w.c.is_release_active(b, rc_b)
+    assert w.c.get_stage(b)['prerequisites_current']
+
+
+def test_stale_but_unreleased_descendant_cannot_release_and_can_retry(w):
+    wf, (a, b) = w.build(stages=2, chain=True)
+    w.release_pass(a)
+    w.provisional(b)
+    rc_b = w.finalize_by_appeal(b)               # final PASS, not yet released
+    sustain_and_repair_parent(w, a)
+    with w.vm.expect_revert('STALE_PREREQUISITE'):
+        w.c.release(b, rc_b)
+    w.c.invalidate_stale(b)
+    with w.as_(w.worker):
+        w.c.retry_failed(b)
+    assert w.state(b) == READY
+
+
+def test_descendant_in_review_is_invalidated_when_parent_changes(w):
+    wf, (a, b) = w.build(stages=2, chain=True)
+    w.release_pass(a)
+    w.provisional(b)                              # PROVISIONAL against the old parent receipt
+    sustain_and_repair_parent(w, a)
+    w.c.invalidate_stale(b)
+    assert w.state(b) == FAILED
+
+
+def test_invalidate_stale_rejected_when_parents_unchanged(w):
+    wf, (a, b) = w.build(stages=2, chain=True)
+    w.release_pass(a)
+    rc_b = w.release_pass(b)
+    with w.vm.expect_revert('PREREQUISITES_UNCHANGED'):
+        w.c.invalidate_stale(b)
+    with w.vm.expect_revert('PREREQUISITES_UNCHANGED'):
+        w.c.invalidate_stale(a)                   # a root stage has no prerequisites to go stale
+    assert w.c.is_release_active(b, rc_b)
+
+
+def test_dismissed_counterexample_keeps_descendants_valid(w):
+    wf, (a, b) = w.build(stages=2, chain=True)
+    w.release_pass(a)
+    rc_b = w.release_pass(b)
+    cid = open_cx(w, a)
+    w.llm(judge=JUDGE_PASS)
+    w.c.resolve_counterexample(cid)               # dismissed: parent receipt unchanged
+    assert w.c.get_stage(b)['prerequisites_current'] and w.c.is_release_active(b, rc_b)
+
+
+def test_receipt_commits_to_parent_identity(w):
+    wf, (a, b) = w.build(stages=2, chain=True)
+    w.release_pass(a)
+    w.provisional(b)
+    first = w.c.get_stage(b)['parent_digest']
+    assert len(first) == 64 and first == w.c.get_stage(b)['parent_digest']
+    assert w.c.get_stage(a)['parent_digest'] == ''

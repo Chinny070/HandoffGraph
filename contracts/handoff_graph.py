@@ -108,7 +108,10 @@ def verdict(raw) -> dict:
 
 
 def shape(v: dict) -> bool:
-    if not isinstance(v, dict) or set(v.keys()) != {'decision', 'coverage', 'risk', 'gap', 'explanation'}:
+    base = {'decision', 'coverage', 'risk', 'gap', 'explanation'}
+    if not isinstance(v, dict) or set(v.keys()) not in (base, base | {'source_ok'}):
+        return False
+    if 'source_ok' in v and type(v['source_ok']) is not bool:
         return False
     return (type(v['decision']) is int and v['decision'] in (PASS, PARTIAL, FAIL, UNKNOWN) and
             type(v['coverage']) is int and v['coverage'] in (COMPLETE, MISSING, CONFLICTING, UNVERIFIABLE) and
@@ -296,6 +299,7 @@ class Stage:
     revocation_hash: str
     counter_id: u256
     counter_attempts: u32
+    parent_digest: str
 
 
 @allow_storage
@@ -455,6 +459,14 @@ class HandoffGraph(gl.Contract):
                 return False
         return True
 
+    def _parent_digest(self, s: Stage) -> str:
+        """Commitment to the exact receipts of every direct prerequisite."""
+        items = [[int(dep), str(self._stage(dep).receipt)] for dep in s.dependencies]
+        return digest(items) if items else ''
+
+    def _parents_current(self, s: Stage) -> bool:
+        return str(s.parent_digest) == self._parent_digest(s)
+
     def _jury(self, criterion: str, evidence: str, objection: str, appeal: str,
               artifact_url: str, artifact_sha256: str,
               support_url: str = '', support_sha256: str = '',
@@ -468,21 +480,33 @@ class HandoffGraph(gl.Contract):
         def leader() -> dict:
             source = assemble_sources(url, expected_sha, support, support_sha, counter_source, counter_sha)
             if not source:
-                return verdict({'decision':'UNKNOWN', 'coverage':'UNVERIFIABLE',
+                missing = verdict({'decision':'UNKNOWN', 'coverage':'UNVERIFIABLE',
                     'risk':True, 'gap':'SOURCE_UNAVAILABLE', 'explanation':'Source fetch/hash failed'})
+                missing['source_ok'] = False
+                return missing
             raw = gl.nondet.exec_prompt(prompt(rule, submission, counter, grounds, source, 'LEADER'), response_format='json')
-            return verdict(raw)
+            result = verdict(raw)
+            if result['gap'] == 'SOURCE_UNAVAILABLE':
+                result['gap'] = 'MODEL_GAP_RENAMED'
+            result['source_ok'] = True
+            return result
 
         def validator(proposed_result) -> bool:
             if not isinstance(proposed_result, gl.vm.Return):
                 return False
             try:
                 proposed = proposed_result.calldata
-                if not shape(proposed):
+                if not shape(proposed) or type(proposed.get('source_ok')) is not bool:
                     return False
                 source = assemble_sources(url, expected_sha, support, support_sha, counter_source, counter_sha)
+                # Source availability is a validated consensus fact, never a leader-chosen label.
+                if bool(source) != proposed['source_ok']:
+                    return False
                 if not source:
-                    return proposed['decision'] == UNKNOWN and proposed['coverage'] == UNVERIFIABLE and proposed['risk'] is True
+                    return (proposed['decision'] == UNKNOWN and proposed['coverage'] == UNVERIFIABLE and
+                            proposed['risk'] is True and proposed['gap'] == 'SOURCE_UNAVAILABLE')
+                if proposed['gap'] == 'SOURCE_UNAVAILABLE':
+                    return False
                 independent = verdict(gl.nondet.exec_prompt(
                     prompt(rule, submission, counter, grounds, source, 'INDEPENDENT VALIDATOR'), response_format='json'))
                 if not shape(independent):
@@ -592,7 +616,7 @@ class HandoffGraph(gl.Contract):
             (workflow_id, worker, reviewer, name, criterion, deps,
              u8(READY), u32(0), '', '', '', '', '', '', u256(0), u256(0),
              u8(UNKNOWN), u256(0), False, '', [], u256(0), u256(0),
-             '', '', '', '', u256(0), False, '', u256(0), u32(0)))
+             '', '', '', '', u256(0), False, '', u256(0), u32(0), ''))
         w.stage_ids.append(stage_id)
         return stage_id
 
@@ -674,7 +698,9 @@ class HandoffGraph(gl.Contract):
         s.artifact_sha256 = artifact_sha256
         s.objection = ''
         s.appeal = ''
+        s.parent_digest = self._parent_digest(s)
         s.submission_hash = digest({'root': str(w.root), 'stage': int(stage_id),
+                                    'parents': str(s.parent_digest),
                                     'attempt': int(s.attempt), 'evidence': evidence,
                                     'artifact_url': artifact_url, 'artifact_sha256': artifact_sha256,
                                     'requirements': [digest(x) for x in s.requirements],
@@ -844,6 +870,7 @@ class HandoffGraph(gl.Contract):
         s.decision_id = u256(0)
         s.receipt = ''
         s.repair_note = ''
+        s.parent_digest = ''
         s.delivery_deadline = u256(clock() + int(s.delivery_timeout)) if s.delivery_timeout and not s.dependencies else u256(0)
         # Previous Decision record is retained, immutable apart from earlier finalization.
 
@@ -854,6 +881,7 @@ class HandoffGraph(gl.Contract):
         # Permissionless release prevents owner censorship of final consensus.
         self._active(w)
         require(s.state == PASSED, 'NOT_FINAL_PASS')
+        require(self._parents_current(s), 'STALE_PREREQUISITE')
         require(not s.released, 'ALREADY_RELEASED')
         require(self._deps_released(s), 'PREREQUISITES_NOT_RELEASED')
         require(expected_receipt == s.receipt and len(expected_receipt) == 64, 'STALE_RECEIPT')
@@ -887,7 +915,9 @@ class HandoffGraph(gl.Contract):
                 'revocation_hash': str(s.revocation_hash), 'counter_id': int(s.counter_id),
                 'requirements': [str(x) for x in s.requirements],
                 'delivery_deadline': self._effective_delivery_deadline(s),
-                'support_sha256': str(s.support_sha256)}
+                'support_sha256': str(s.support_sha256),
+                'parent_digest': str(s.parent_digest),
+                'prerequisites_current': self._parents_current(s)}
 
     @gl.public.view
     def get_case_payload(self, stage_id: u256) -> dict:
@@ -953,7 +983,7 @@ class HandoffGraph(gl.Contract):
             s.state == PASSED and s.released and not self._is_quarantined(s) and
             d is not None and d.final and s.ruling == PASS) and bool(
             expected_receipt and len(expected_receipt) == 64 and s.receipt == expected_receipt and
-            d.receipt == expected_receipt and self._deps_released(s))
+            d.receipt == expected_receipt and self._deps_released(s) and self._parents_current(s))
 
     @gl.public.view
     def is_release_bound(self, workflow_id: u256, stage_id: u256, expected_root: str,
@@ -1016,7 +1046,7 @@ class HandoffGraph(gl.Contract):
             s.ruling = u8(result['decision'])
             # Preserve original receipt and released flag for historical audit,
             # but invalidate effective capability via state/quarantine checks.
-        elif result['gap'] == 'SOURCE_UNAVAILABLE':
+        elif result.get('source_ok') is False:
             # A fetch/hash failure proves nothing either way: lift this quarantine but free the
             # single slot so the reviewer can reopen with a source that actually verifies.
             c.status = u8(COUNTER_INCONCLUSIVE)
@@ -1136,7 +1166,21 @@ class HandoffGraph(gl.Contract):
         s.delivery_deadline = u256(clock() + int(s.delivery_timeout)) if s.delivery_timeout and not s.dependencies else u256(0)
         s.counter_id = u256(0)
         s.counter_attempts = u32(0)
+        s.parent_digest = ''
         # No previous Decision record is modified.
+
+    @gl.public.write
+    def invalidate_stale(self, stage_id: u256) -> str:
+        """Permissionless: a decision made against prerequisite receipts that have since changed
+        (for example after an upstream repair) is withdrawn and the stage must be re-evaluated."""
+        s = self._stage(stage_id)
+        require(s.state in (REVIEW, DISPUTED, PROVISIONAL, APPEALED, PASSED), 'NOT_INVALIDATABLE')
+        require(not self._parents_current(s), 'PREREQUISITES_UNCHANGED')
+        s.state = u8(FAILED)
+        s.ruling = u8(UNKNOWN)
+        s.revocation_hash = digest({'stage': int(stage_id), 'root': str(self._workflow(s.workflow_id).root),
+                                    'stale_parents': str(s.parent_digest), 'current_parents': self._parent_digest(s)})
+        return str(s.revocation_hash)
 
     @gl.public.write
     def expire_delivery(self, stage_id: u256) -> str:
