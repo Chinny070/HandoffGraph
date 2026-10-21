@@ -1,69 +1,86 @@
-# HandoffGraph — Live StudioNet Proofs
+# HandoffGraph — Live StudioNet proofs
 
 Network: GenLayer StudioNet, chain id 61999, RPC https://studio.genlayer.com/api.
-Every submitted transaction is logged in `proofs/tx_log.tsv` (label, account, method, hash, final status, consensus result, execution tally, note). Note: a few early rows have blank status because the CLI lost its RPC connection while polling; those transactions were re-verified by receipt where they matter, and the helper now retries.
-Nothing below is inferred from mock tests.
+Evidence files: `proofs/tx_log.tsv` (raw log written while running), `proofs/tx_reconciled.tsv` (every logged transaction re-read from the chain: final status, consensus result, leader execution result decoded, gas used), `proofs/V4_RUN.md` (all 94 core-v4 transactions with hashes and outcomes).
+Reconciliation result: **325 transactions, 325 FINALIZED**, gas used 0 on all 325. Final status alone does not mean the contract accepted the call: each row's decoded outcome says whether the leader returned a value (`return`), rejected deliberately (`user_error:X`), or failed in the VM. Consensus `MAJORITY_DISAGREE` (10 transactions) and `NO_MAJORITY` (12) mean validators did not apply the transaction.
 
-## Final deployed contracts (current)
+## Current deployment
 
-| Contract | Address | Deploy tx | Local source SHA-256 |
-|----------|---------|-----------|----------------------|
-| HandoffGraph core v3 | 0x5E716D24DB36Cb8F2C4E793a9295Ba2F341cd447 | 0xbc3e5100d870977aa2dbc4811a6af318cb0eee8738845d2402e748fb5e664003 | 99fa8f0db31aaa5ab200eb95b61083ab82f9f9cd16426f4b42f4ea003cdea3b0 |
-| HandoffConsumerExample, stage 9 (released) | 0x97cb9feBC8c4F953F2F0CD787a19086f3fb430fE | 0xa997c2548c17e474123ef012e7aff9cf7a124f4a633ecc72717033665e85fdf7 | see note |
-| HandoffConsumerExample, stage 11 | 0x6C07F7e2B17C3Ac5dAeeC9E0DAdf96E3C5f394F4 | 0x3f496e36d67493c5afc3bc6a95996a50db564e279a219bbb9b2a0c665f55f0f8 | see note |
-| HandoffCapabilityConsumer, stage 9 | 0x90E857EbBC55717714e653361d0ca0e304028C1E | 0x336f995c8103684a583540bccecd367887485f85ccacd6e6297f522513f3ec42 | see note |
+| Contract | Address | Deploy tx |
+|---|---|---|
+| HandoffGraph core v4 | 0x82B4D2f2b2DcD9590CE605095515891BAE2aFB25 | 0x278c1d5aa329c92b79cc746342d199e254b06ccce68ac227366571dd330befd8 |
+| Consumer example, bound to stage 1 | 0x98EF87D7C33D6d12E8B5d814FF8B896f96b05ad5 | see `V4_RUN.md` |
+| Consumer example, bound to stage 3 | 0x05f11AE0835A1166Ee69A8213b7D5dF51D3c5a8D | see `V4_RUN.md` |
+| Capability consumer, 25-minute expiry | 0x80564f838c275140236d27aD3d38EA85B1F6E13C | see `V4_RUN.md` |
+| Capability consumer, 24-hour expiry | 0x9cF06d52283F6F05626745065198935F649D7FFf | see `V4_RUN.md` |
 
-Note: the consumer sources on disk at deploy time were the committed `contracts/handoff_consumer_example.py` and `contracts/handoff_capability_consumer.py` of commit "Consumers use accepted-state single-call gate". Core source parity (on-chain `gen_getContractCode`, base64-decoded, SHA-256) was verified for core v1, v2 and v3 (v3 on-chain hash equals the local hash above). It was NOT checked for the three consumers.
+Workflow 1 root: `733128a79675de9b2a2bbea2c84ae822d972cccafacbe5de6a2cda19423b824e`. Evidence is pinned to commit `694f81ba502c1a5249e194b600795a92f8faa46c` (see `evidence/`).
 
-Superseded deployments (kept for the record): core v1 `0x8252ab2Aa97373cb7C2a344427Ab12Ad06b7bBed` (failed closed on every source fetch because the code read `status_code`), core v2 `0x6C0188da134d7518b6198A9fd2e0e94066a5c08C` (consumers read 5 views and hung), probe `0xa7d69B09824aB66E23C238121754750046E35f66`.
+**Source parity (all VERIFIED with `scripts/verify_source_parity.py`):** core v4 on-chain SHA-256 `7271b461e936eda678999d7aac1df246f46a1f1fb800e17296992b000400c535` equals the committed file in CRLF form (the form a Windows working copy uploads). The two consumer-example instances match `864f53e7…` and both capability consumers match `f5f8b0cf…`, again as CRLF. Earlier deployments are also verified: consumers `0x97cb…30fE`, `0x6C07…94F4`, `0x90E8…8C1E` match commit `c049f64`; core v3 matches its file.
+
+Superseded deployments (kept for the record): core v1 `0x8252…bBed` (every source fetch failed closed, bug F1), v2 `0x6C01…c08C`, v3 `0x5E71…d447` (workflow 3 proofs), and several probe contracts.
 
 ## Actors
 
-Owner `my-studionet-wallet` 0xaffe15eec45b68835cc9e5b4ab85dd5deae8e70b (pre-existing signer). Worker `hg-worker` 0xb410641df4727fc8fc950f2eb0805128cf490c6d and reviewer `hg-reviewer` 0x8d3a9a8a5a41fe6142e5922c60e5f8a8d0276160 were created for this run and funded from the StudioNet faucet. Nothing was transferred from the owner wallet.
+Owner `my-studionet-wallet` `0xaffe15ee…e70b`; worker `hg-worker` `0xb410641d…0c6d`; reviewer `hg-reviewer` `0x8d3a9a8a…6160` (created for this run). No transfers were made from the owner wallet.
 
-## Evidence (pinned to commit 0139bc794606bfb203792b48d7ecc93ba4caf6bd)
+## Lifecycle proofs on core v4 (all FINALIZED; hashes in `proofs/V4_RUN.md`)
 
-delivery_pass.md 4cb07a3f…ccd3 · delivery_fail.md 0502c36b…6162 · counter_defect.md 748b6335…8c68 · delivery_repaired.md ccd46d56…2fe9 (full hashes in `proofs/tx_log.tsv` commands and `evidence/`).
+| Item | Result | Transaction |
+|---|---|---|
+| Create, 6 stages, requirements, delivery timeout, seal | sealed | seal `0xe3d8094ac53073454f45f9d58b0485990a5ba3e3c203dfe31473a8c618c6ba7c` |
+| Freeze blocks submission; non-owner cannot freeze | `WORKFLOW_FROZEN`, `ONLY_OWNER` | `0x4a927763…363b`, `0x5660df84…e864` |
+| Support evidence: non-worker rejected, worker attach binds hash, second attach rejected | `ONLY_WORKER`, success (decision stores `support_sha256 1398f6e0…`), `SUPPORT_NOT_OPEN` | `0xc0abc7eb…a549`, `0x2a32c3d8…1a1b`, `0x7ee65028…1720` |
+| Requirement-by-requirement AI evaluation | PASS, both requirements PASS | assess `0x741e80de6884e6643da7f0ff506c4a4eb9c6629df3296d2337553c8c17d6740e` |
+| Appeal then final adjudication | final PASS, receipt `5c762a1e…5a00` | resolve `0x864206dd024d3f41e86ccc5a76f5a7403bb55ea536cfda54e3333f41aab15154` |
+| Release while frozen | `WORKFLOW_FROZEN`; succeeds after thaw | `0x011471e5…c5f8`, release `0xb6386a2d723a7b14955518b33bddf4bf9b06de01e0a838480890cf6ed1ef4005` |
+| Replayed release | `ALREADY_RELEASED` | `0xb96df3a3…abe0` |
+| Legitimate FAIL, blocked release | final FAIL; release rejected `NOT_FINAL_PASS` | resolve `0x25f4ac55…9e16`, `0xb7182897…c3a1` |
+| Retry and repaired evidence (stage 3) | assessment needed 4 attempts: 3 MAJORITY_DISAGREE (`0xb3cfdf79…a30`, `0x3e3afc1d…3267`, `0x8d73ca22…db00`) then success `0x4c158d90…9343`; final PASS, released | release `0xf473089e36c2be1ffade0b502004963dcfd50efade0e44f4628592961ded5ebb` |
+| Consumer, stage 1: wrong receipt, non-operator, authorized execution, replay | `HANDOFF_NOT_RELEASED`, `ONLY_OPERATOR`, executed once, `ALREADY_EXECUTED` | `0x029009…1ddc`, `0x2c014ed2…69b4`, `0xdae6d816…0280`, `0xd015f342…8ccd` |
+| Capability (25 min): consume, replay nonce, wrong action | consumed once, `CAPABILITY_INVALID` twice | `0x469cdd56…3b1c`, `0xddbfe655…0440`, `0x650664fd…5cc6` |
+| Capability (24 h): non-operator, consume | `ONLY_OPERATOR`, consumed | `0x876e40ff…d5de`, `0x15b2873c…618b` |
+| Counterexample opened (quarantine immediate), capability denied during court | `CAPABILITY_INVALID` | open `0x11b04191…2c2b`, deny `0x740ee153…4961` |
+| Counterexample sustained, stage FAILED, descendants and capability denied | status 3; `is_release_active` false; stage 2 `can_submit` false; capability denied | resolve `0x1e35aa48…218e`, deny `0x65dd08a2…7d2b` |
+| Counterexample appeal: outsider rejected, worker appeals, repair blocked while pending, appeal resolved | `ONLY_WORKER`; success; `COUNTER_APPEAL_PENDING`; UPHELD (status 7) | `0x92a975f4…35db`, `0x68c06764…6eba`, `0x7aa574af…ccce`, `0xf28a5e6e…1aec` |
+| Repair after upheld counterexample, re-evaluation, new receipt | final PASS, new receipt `fb085e27…bdc4`; old receipt inactive | repair `0x20ef158f…f654`, resolve `0xa0e9a346…652b`, release `0x09916baa…b130` |
+| Downstream authorization after recovery | stage 2 `can_submit` true, submission accepted | `0xbf147a3b…6890` |
+| Capability and consumer after recovery | 24 h capability consumed with the new receipt (use_count 2), over-cap use denied; stage-3 consumer executed once on the finalized gate, replay `ALREADY_EXECUTED` | `0x75fb2a29…7f44`, `0xd2d3960f…5a3e`, `0x2e6305bc…edcc6`, `0xc528acec…d23f` |
+| Unaffected branch | stage 3 independently failed, repaired and released while stage 1 was being quarantined and repaired | see above |
+| Delivery deadline expiry | stage 4 expired to FAILED after its 1-hour deadline; second call `DELIVERY_NOT_EXPIRABLE` | `0x93c6c7d6…b155`, `0xfa8dcb39…6194` |
+| Capability expiry | with the stage release still active, the expired capability was refused (`CAPABILITY_INVALID`), use_count unchanged | `0x6d105f2a…c465` |
 
-## Verified lifecycle (workflow 3 on core v3, root 1819c907610f19067a83ef14a7cff60ef12f8ecd67c224a873ad9f739e895258)
+Notes on rows: the transaction labelled `s1-appeal-outsider` in the raw log was actually sent by the worker (a valid appeal), not an outsider; outsider-appeal rejection is proven in Direct Mode. `s1-release-stale` and `s1-old-receipt` were rejected with `ALREADY_RELEASED` (the state check fires before the receipt check), so the `STALE_RECEIPT` branch is proven in Direct Mode, not live.
 
-All rows are FINALIZED transactions; AI evaluation used the StudioNet validator set with real pinned-source fetches.
+## Finality investigation (consumers)
 
-| Item | Result | Evidence tx |
-|------|--------|-------------|
-| Create + seal, 4 stages, DAG 9→10, 2 mandatory requirements on stages 9–11 | sealed | seal `0xa94a2530…733a` |
-| Stage 9 requirement-by-requirement evaluation | PASS, both requirements PASS | assess `0xdb43259e…6cdb` |
-| Appeal then final adjudication, permissionless release | final PASS, released | resolve `0x519629fe…8cd3`, release `0xf95fdc8f…e71b` |
-| Replayed release | rejected `ALREADY_RELEASED` | `0x138614de…2505` |
-| Stage 11 FAIL on genuinely deficient evidence | final FAIL (stage 11 attempt 1), release blocked | appeal/resolve rows in log |
-| Counterevidence challenge after release | counterexample sustained (status 3) | open `0x4d6ea13a…063b`, resolve `0x3887fa67…ae8f` |
-| Causal quarantine | stage 9 quarantined, `is_release_active` false, downstream stage 10 `can_submit` false | reads in `life3` run |
-| Unaffected branch | stage 11 recovered from FAIL with repaired evidence, final PASS and released | retry/resubmit/assess/resolve/release rows |
-| Delivery deadline expiry | stage 12 expired to FAILED via `expire_delivery` | `0xd892f360…6908` |
-| Validator disagreement | resolve_appeal on stage 11 returned MAJORITY_DISAGREE (votes AGREE, DISAGREE, DISAGREE, DISAGREE), no state change; retry succeeded | `0xfe1749d4…c191`, `0xafa1ad37…bea91` |
-| Consumer: refused before final | `HANDOFF_NOT_RELEASED` | `0xf9186939…1264` |
-| Consumer: unauthorized caller | rejected | `0x1e266eb8…bac` |
-| Consumer: authorized action | executed once (`action_count: 1`) | `0x06e54050…98b0` |
-| Consumer: replay | rejected `ALREADY_EXECUTED` | `0xda676b34…e137` |
-| Capability: wrong action hash, unauthorized caller | rejected `CAPABILITY_INVALID` / not operator | `0xcae63931…f940`, `0x36cb25a7…983f` |
-| Capability: consume nonce 1, replay nonce 1 | consumed once (`use_count: 1`), replay rejected | `0x4eea5ce0…4362`, `0xa868aa96…5410` |
-| Capability after quarantine | rejected `CAPABILITY_INVALID` | `0x680002c3…e164` |
-| Stage 11 consumer after repair and release | executed once, replay refused (`action_count: 1`) | `0xcdd563f3…d4c8d463`, `0xff7be98e…e046` |
+- `StorageType.LATEST_FINAL` cross-contract reads hang on StudioNet. Reproduced against a trivial one-method contract (`0x7885…F820` read by probe `0x6CBB…6474`): the transaction never reached ACCEPTED within 300 s, and earlier consumer transactions ended `NO_MAJORITY` with `vm_error: timeout` after 600 s. Default and `LATEST_NON_FINAL` reads complete normally.
+- Measured accepted-to-finalized lag on StudioNet was about 30 s.
+- Working alternative, verified live: a probe (`0x01D4…4baA`) made every validator POST a `gen_call` with `status: finalized` to the RPC under strict-equality consensus; it returned `True` for released stage 11 and `False` for quarantined stage 9. Both consumers now use this as a second gate alongside the accepted-state gate and fail closed on any error. The residual trust in the RPC endpoint is documented in `docs/THREAT_MODEL.md` and `SECURITY_AUDIT.md`.
 
-## Not verified live
+## Real-time deadline proofs still pending
 
-- Review-window (12 h) and appeal-window (24 h) expiry paths, `finalize_unappealed`, `expire_assessment`, `expire_appeal`, counterexample expiry: not waited out.
-- Freeze/thaw, `attach_support`, `submit_repair`, counter-appeal (`appeal_counterexample`): no live run.
-- Capability time expiry and revocation after a later countercase beyond the quarantine case above.
-- Source parity for the three consumer deployments.
+Started on core v4 stages 5 and 6 and run by the detached script `scripts/run_timed_proofs.sh` (log: `proofs/timed_proofs.log`):
 
-## Findings from live testing
+| Proof | Earliest time (unix) | Status at time of writing |
+|---|---|---|
+| Stage 5 `assess` rejected before the 12 h review window closes | now | done: rejected `REVIEW_WINDOW_OPEN` (`0x99f0b19d…f8d4`) |
+| Stage 5 permissionless `assess` after the review window | 1792630168 | pending |
+| Stage 6 `finalize_unappealed` rejected inside the 24 h appeal window | now | script attempts it |
+| Stage 6 `finalize_unappealed` and release after the window | 1792673512 | pending |
 
-1. `response.status_code` does not exist in the GenVM web API (field is `status`); the swallowed exception made every source fetch fail closed. Mock tests had the same wrong field. Fixed in core v2.
-2. Cross-contract reads using `StorageType.LATEST_FINAL` hang on StudioNet: a probe transaction (`0x20e15ed0…c9c`) stayed in PROPOSING indefinitely, while default and `LATEST_NON_FINAL` reads complete. Consumers therefore read accepted state. Finality is enforced at the protocol level (the core only reports PASSED after appeal resolution), not at consensus-snapshot level. The original design invariant is therefore weakened on StudioNet.
-3. A consumer making 5 cross-contract view calls timed out the leader (600 s). The core now exposes `is_release_bound`, a single-call gate used by both consumers.
-4. Reads can briefly lag the last write on StudioNet (state read immediately after a write sometimes showed the previous state); sequence-dependent scripts must wait for the expected state.
+## Not proven live (Direct Mode only, with warped time)
+
+`expire_assessment`, `expire_appeal`, `expire_counterexample`, `expire_counter_appeal`, counterexample dismissal (PASS verdict) and counter-appeal OVERTURNED, and every window boundary at ±1 s. These need 24 h to 7 days of real time per case. They are covered by `direct_tests/test_handoff_lifecycle.py` (real GenVM runtime, mocked web/LLM, `direct_vm.warp`) and must not be read as live proofs.
+
+## Findings made during live testing
+
+1. F1: `response.status_code` does not exist in the GenVM web API (the field is `status`); the swallowed exception made every source fetch fail closed.
+2. F6: `LATEST_FINAL` hang, above.
+3. Strict consensus can stall a stage: the repaired-evidence assessment needed four attempts. Failure is closed (state unchanged) and retryable by anyone.
+4. The CLI reports `FINALIZED` for transactions whose consensus result was `MAJORITY_DISAGREE`; callers must check the consensus result and re-read state, not just the status.
+5. A shell bug in my first scripts passed an empty receipt argument to 11 calls, which the VM rejected as malformed calldata (`vm_error: exit_code 1`); these are tooling errors, not contract defects.
 
 ## Fees
 
-The owner wallet balance read 309.93 GEN before and after the run and the new accounts showed no balance requirement; no GEN fee was observed on StudioNet. Fees are therefore unmeasured rather than proven zero. No transfers were made.
+`eth_gasPrice` returns 0, every one of the 325 reconciled transactions reports `gas_used` 0, and the worker and reviewer accounts (balance 0) submitted dozens of transactions. StudioNet charged no fees for this work. This says nothing about costs on any other network.

@@ -1,6 +1,6 @@
 # Proof gates and honest deployment protocol
 
-Target only **stable StudioNet (chain 61999)**, RPC `https://studio.genlayer.com/api`. Never use Bradbury, studio-dev, studio-next, or preview chain 61997. No deployment has been performed by this package.
+Target only **stable StudioNet (chain 61999)**, RPC `https://studio.genlayer.com/api`. Never use Bradbury, studio-dev, studio-next, or preview chain 61997. Status: the gates below were executed; results are in `BUILD_STATUS.md`, `LIVE_PROOFS.md` and `SECURITY_AUDIT.md`. The spending-ceiling language is historical: StudioNet reported gas price 0 and gas used 0 for all 325 transactions.
 
 ## Gate 0 — local determinism / static
 
@@ -31,6 +31,15 @@ Target only **stable StudioNet (chain 61999)**, RPC `https://studio.genlayer.com
 - Prove optional consumer denial before final release, success after release, and **subsequent denial on post-release quarantine**; once-executed events remain historical.
 - Record exact transaction hashes, fresh latest-final readbacks and gas/GEN spent. Only then update a live-proof file and submission score claims.
 
-## Known build limitations
+## Gate status (executed)
+
+- Gate 0: lint pass (3/3), 141 offline, 33/33 structural.
+- Gate 1: 93 real Direct Mode tests; consumers' cross-contract path verified live, not in Direct Mode.
+- Gate 2: StudioNet chain 61999 asserted; fee behavior measured (zero).
+- Gate 3: deployments with source parity, live lifecycle, consumer denial/success/quarantine denial recorded. Review/appeal/counter long-window expiries are not all live-proven.
+
+## Known build limitations (historical, resolved or re-scoped)
+
+The notes below were written before any GenVM run. Resolved: storage dataclasses, cross-contract views, nested prompt cost, runner compatibility. Re-scoped: `StorageType.LATEST_FINAL` hangs on StudioNet and is replaced by an RPC-based finalized gate.
 
 The source is not certified deployable because GenVM semantic compilation, Direct Mode and StudioNet are unavailable here. In particular, complex `@allow_storage` dataclasses, storage of requirement vectors and countercases, cross-contract `StorageType.LATEST_FINAL`, callable `is_release_active` views, nested prompt cost, and pinned runner compatibility require real verification. This is **not** a minor checkbox; these are mandatory gates.
