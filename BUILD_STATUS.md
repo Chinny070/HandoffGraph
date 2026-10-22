@@ -11,6 +11,7 @@ Evidence tiers are kept separate below. Offline mock results are never counted a
 | Offline mock suite (labelled mock runtime, not GenVM) | 175 passed | `python -m pytest tests -q` |
 | Real GenVM Direct Mode (mocked web/LLM, warped time, validator replay) | 105 passed | `python -m pytest direct_tests -q` |
 | One-command portable run of all tiers | pass | `python scripts/verify.py` (CI: `.github/workflows/direct-mode.yml`) |
+| GitHub Actions (ubuntu-24.04) | both workflows pass at `a55cdac` (offline suite; GenVM lint + Direct Mode via `scripts/verify.py`) | `.github/workflows/` |
 | Structural preflight | 33/33 | `python scripts/preflight.py` |
 | Live StudioNet (chain 61999) | 496 logged transactions, all FINALIZED; current run 99 transactions, all MAJORITY_AGREE | `LIVE_PROOFS.md`, `proofs/tx_reconciled.tsv`, `proofs/V5_RUN.md` |
 | Independent RPC-only recheck | 5 contracts bytecode-matched to a commit, 40 transactions re-read | `proofs/RECHECK.md` (`scripts/recheck_deployment.py`) |
