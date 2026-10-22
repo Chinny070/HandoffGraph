@@ -96,7 +96,7 @@ python -m pip install --pre -r requirements-dev.txt
 python scripts/verify.py
 ```
 
-It runs compile checks, the structural preflight, `genvm-lint` on all three contracts, the offline mock tests and the real Direct Mode tests. CI runs the same script (`.github/workflows/direct-mode.yml`). Individual steps:
+Direct Mode pins GenVM `v0.2.16` (override with `HANDOFF_GENVM_VERSION`) because it would otherwise resolve the newest release, which may lack the needed asset. It runs compile checks, the structural preflight, `genvm-lint` on all three contracts, the offline mock tests and the real Direct Mode tests. CI runs the same script (`.github/workflows/direct-mode.yml`). Individual steps:
 
 ```bash
 python scripts/preflight.py

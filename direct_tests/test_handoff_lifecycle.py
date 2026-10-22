@@ -10,7 +10,12 @@ import json
 import re
 import time
 
+import os
+
 import pytest
+
+# Pinned: Direct Mode otherwise resolves the newest GenVM release, which may lack the needed asset.
+GENVM_SDK_VERSION = os.environ.get('HANDOFF_GENVM_VERSION', 'v0.2.16')
 
 COMMIT = 'a' * 40
 BASE = 'https://raw.githubusercontent.com/Chinny070/HandoffGraph/' + COMMIT + '/evidence/'
@@ -46,7 +51,7 @@ def checks(*statuses):
 class World:
     def __init__(self, vm, deploy, alice, bob, charlie):
         self.vm = vm
-        self.c = deploy('contracts/handoff_graph.py')
+        self.c = deploy('contracts/handoff_graph.py', sdk_version=GENVM_SDK_VERSION)
         self.owner = vm.sender
         self.worker, self.reviewer, self.other = alice, bob, charlie
         self.now = START

@@ -4,14 +4,19 @@ This suite runs in GenLayer's runtime adapter, not in the offline mock.
 The source-backed semantic success/falsification matrix is a mandatory extension
 before a deployment is called ready. See docs/DEPLOYMENT_GATES.md.
 """
+import os
+
 import pytest
+
+# Pinned: Direct Mode otherwise resolves the newest GenVM release, which may lack the needed asset.
+GENVM_SDK_VERSION = os.environ.get('HANDOFF_GENVM_VERSION', 'v0.2.16')
 
 RULE = 'The published delivery report documents exactly three validated output records.'
 ZERO = 0
 
 
 def setup_one(direct_deploy, direct_vm, direct_alice):
-    c = direct_deploy('contracts/handoff_graph.py')
+    c = direct_deploy('contracts/handoff_graph.py', sdk_version=GENVM_SDK_VERSION)
     owner = direct_vm.sender
     w = c.create_workflow('Direct', 'Source-bound review and final release')
     s = c.add_stage(w, 'Output', direct_alice, owner, RULE, ZERO, ZERO, ZERO)
