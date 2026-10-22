@@ -47,7 +47,7 @@ gw s1-challenge "$RV" "$CORE" challenge 1 "Verify the report really contains thr
 gw s1-assess "$O" "$CORE" assess 1
 gw s1-appeal-worker "$WK" "$CORE" appeal 1 "Requesting final adjudication."
 gw s1-resolve "$O" "$CORE" resolve_appeal 1
-wait_state "$CORE" 1 6
+wait_state "$CORE" 1 6 || exit 1
 RC1=$(fld "$CORE" 1 receipt); echo "RC1=$RC1"
 gw freeze2 "$O" "$CORE" freeze 1
 gw release-while-frozen "$RV" "$CORE" release 1 "$RC1"
@@ -61,7 +61,7 @@ gw s3-challenge "$RV" "$CORE" challenge 3 "Verify the record count and validatio
 gw s3-assess "$O" "$CORE" assess 3
 gw s3-appeal "$WK" "$CORE" appeal 3 "The report should be accepted as delivered."
 gw s3-resolve "$O" "$CORE" resolve_appeal 3
-wait_state "$CORE" 3 7
+wait_state "$CORE" 3 7 || exit 1
 gw s3-release-failed "$RV" "$CORE" release 3 "$ZERO64"
 gw s3-retry "$WK" "$CORE" retry_failed 3
 gw s3-submit2 "$WK" "$CORE" submit 3 "Repair delivery DR-201 lists three records, all VALID." "$B/delivery_repaired.md" "$REPH"
@@ -72,7 +72,7 @@ for n in 1 2 3 4; do
 done
 gw s3-appeal2 "$WK" "$CORE" appeal 3 "Requesting final adjudication of the repaired delivery."
 gw s3-resolve2 "$O" "$CORE" resolve_appeal 3
-wait_state "$CORE" 3 6
+wait_state "$CORE" 3 6 || exit 1
 RC3=$(fld "$CORE" 3 receipt); echo "RC3=$RC3"
 gw s3-release "$RV" "$CORE" release 3 "$RC3"
 
@@ -82,7 +82,7 @@ gw s2-challenge "$RV" "$CORE" challenge 2 "Verify independently."
 gw s2-assess "$O" "$CORE" assess 2
 gw s2-appeal "$WK" "$CORE" appeal 2 "Requesting final adjudication."
 gw s2-resolve "$O" "$CORE" resolve_appeal 2
-wait_state "$CORE" 2 6
+wait_state "$CORE" 2 6 || exit 1
 RC2=$(fld "$CORE" 2 receipt); echo "RC2=$RC2"
 gw s2-release "$RV" "$CORE" release 2 "$RC2"
 echo "stage2 release active:"; rd "$CORE" is_release_active --args 2 "$RC2"

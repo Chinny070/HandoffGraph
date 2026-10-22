@@ -4,7 +4,7 @@
 
 **Core `contracts/handoff_graph.py`**: one independently deployable GenLayer IC, no imports from optional contracts, no payment/tokens. The graph is immutable after sealing. Actor roles: owner configures/short-freezes; worker submits/repairs; reviewer challenges; owner or reviewer can file a bounded post-release counterexample; worker can appeal; every other lifecycle function is permissionless after deterministic eligibility checks. Distinct worker/reviewer address is enforced; owner/reviewer non-collusion is not cryptographically guaranteed.
 
-**Optional `handoff_consumer_example.py`**: a fixed `(graph address, workflow ID, stage ID, workflow root, operator)` one-shot action. Reads the latest-final graph state and calls `is_release_active` to prevent stale receipts after quarantine. **Optional `handoff_capability_consumer.py`**: same binding plus immutable `action_hash`, deadline, max 1–32 uses and nonce replay map. Consumer cannot force the graph to decide PASS; it only reads an existing final, released certificate.
+**Optional `handoff_consumer_example.py`**: a fixed `(graph address, workflow ID, stage ID, workflow root, operator)` one-shot action. Checks the core's single `is_release_bound` view (accepted state) and a finalized-state gate that every validator fetches from the StudioNet RPC under strict equality, so stale receipts and quarantined releases are refused. Native `LATEST_FINAL` reads hang on StudioNet; the finalized gate therefore trusts the RPC (it can only deny). See `docs/CONSUMER_INTEGRATION.md`. **Optional `handoff_capability_consumer.py`**: same binding plus immutable `action_hash`, deadline, max 1–32 uses and nonce replay map. Consumer cannot force the graph to decide PASS; it only reads an existing final, released certificate.
 
 ## Trust division
 
@@ -24,6 +24,8 @@ AI/equivalence: assess whether artifact satisfies natural-language criteria; per
 8. `is_release_active` is false for frozen workflows, quarantine, failed stage, unreleased stage, mismatched receipt, nonfinal decision and unreleased prerequisites.
 9. Unknown source or malformed/unavailable model output cannot generate release, but can produce a fail-closed UNKNOWN result.
 10. Timeouts do not auto-PASS. External links are limited to commit-addressed raw GitHub artifacts.
+11. A stage's submission commits to the exact receipts of its prerequisites (`parent_digest`). If a prerequisite is repaired and re-released, every descendant decision made against the old receipt is inactive (`is_release_active` false, `release` rejects `STALE_PREREQUISITE`) until `invalidate_stale` withdraws it and the stage is re-evaluated.
+12. Whether sources were available is a consensus-validated field (`source_ok`) that each validator reproduces from its own fetch; a leader's free-text `gap` can never change state.
 
 ## Decision records and witness provenance
 
@@ -35,6 +37,7 @@ AI/equivalence: assess whether artifact satisfies natural-language criteria; per
 
 - Retry: `FAILED` → `READY` for unused attempts; historical decisions remain.
 - Release: `PASSED` → `PASSED + released=true`, once per attempt.
-- Counterexample: `PASSED + released` → `quarantined`, independently adjudicated. Dismissal clears quarantine; sustained verdict changes effective state to `FAILED`, retaining original decision/release history. Bounded worker appeal can overturn and reactivate original receipt; otherwise repair starts a new attempt. Timed-out unresolved countercases fail closed and do not restore capability.
+- Counterexample: `PASSED + released` → `quarantined`, independently adjudicated. Dismissal clears quarantine; sustained verdict changes effective state to `FAILED`, retaining original decision/release history. Bounded worker appeal can overturn and reactivate original receipt; otherwise repair starts a new attempt. Timed-out unresolved countercases fail closed and do not restore capability. A counterexample whose source could not be verified frees its slot (at most 3 attempts per stage); a substantive UNKNOWN verdict fails closed.
+- Stale prerequisites: `REVIEW`/`DISPUTED`/`PROVISIONAL`/`APPEALED`/`PASSED` become `FAILED` through the permissionless `invalidate_stale` once a prerequisite receipt has changed; the worker then repairs or retries.
 
 See `examples/multi_agent_handoff.md` for a complete illustrative flow. It is a scenario, NOT claimed onchain evidence.

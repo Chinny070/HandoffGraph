@@ -19,6 +19,22 @@ TXLOG="$ROOT/proofs/tx_log.tsv"
 [ -f "$TXLOG" ] || printf "label\taccount\tmethod\ttx\tstatus\tconsensus\texecution\tnote\n" > "$TXLOG"
 
 O="$GL_OWNER_ACCOUNT"; WK="$GL_WORKER_ACCOUNT"; RV="$GL_REVIEWER_ACCOUNT"
+
+# Isolate the genlayer CLI's global "active account" state in a private home directory so other
+# processes using the same user profile cannot switch accounts under a running script.
+REAL_HOME="$HOME"
+GL_CLI_HOME="${GL_CLI_HOME:-$GL_STATE_DIR/home}"
+mkdir -p "$GL_CLI_HOME/.genlayer/keystores"
+for acct in "$GL_OWNER_ACCOUNT" "$GL_WORKER_ACCOUNT" "$GL_REVIEWER_ACCOUNT"; do
+  [ -f "$GL_CLI_HOME/.genlayer/keystores/$acct.json" ] || cp "$REAL_HOME/.genlayer/keystores/$acct.json" "$GL_CLI_HOME/.genlayer/keystores/" || { echo "missing keystore for $acct"; exit 1; }
+done
+printf '{
+  "network": "studionet",
+  "activeAccount": "%s"
+}
+' "$GL_OWNER_ACCOUNT" > "$GL_CLI_HOME/.genlayer/genlayer-config.json"
+if command -v cygpath >/dev/null 2>&1; then export USERPROFILE="$(cygpath -w "$GL_CLI_HOME")"; else export USERPROFILE="$GL_CLI_HOME"; fi
+export HOME="$GL_CLI_HOME"
 OP="$GL_OWNER_ADDR"; W="$GL_WORKER_ADDR"; R="$GL_REVIEWER_ADDR"
 RULE='The published delivery report documents exactly three validated output records.'
 EVIDENCE_BASE="https://raw.githubusercontent.com/Chinny070/HandoffGraph/$GL_EVIDENCE_COMMIT/evidence"
@@ -42,6 +58,7 @@ gw() {
       [ -n "$tx" ] && break
       sleep 10
     done
+    if [ -z "$tx" ]; then echo "ABORT: could not submit $label ($method) after 5 attempts (RPC/CLI failure); fix connectivity and rerun on a fresh core"; exit 1; fi
     st=""; rec=""
     for attempt in 1 2 3 4 5 6; do
       rec=$(genlayer receipt "$tx" --status FINALIZED 2>&1)
@@ -84,7 +101,7 @@ wait_state() {
 dep() {
   local out h a
   genlayer account use "$O" >/dev/null 2>&1
-  out=$(genlayer deploy --contract "$1" --args "${@:2}" 2>&1)
+  if [ $# -gt 1 ]; then out=$(genlayer deploy --contract "$1" --args "${@:2}" 2>&1); else out=$(genlayer deploy --contract "$1" 2>&1); fi
   h=$(echo "$out" | grep -oE "'Transaction Hash': '0x[0-9a-f]+'" | grep -oE "0x[0-9a-f]+")
   a=$(echo "$out" | grep -oE "'Contract Address': '0x[0-9a-fA-F]+'" | grep -oE "0x[0-9a-fA-F]+")
   printf "deploy\t%s\t%s\t%s\n" "$1" "$h" "$a" | tee -a "$TXLOG"

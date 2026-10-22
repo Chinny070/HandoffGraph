@@ -21,7 +21,7 @@ Target only **stable StudioNet (chain 61999)**, RPC `https://studio.genlayer.com
 
 - `npm install`, `node scripts/assert_studionet.mjs` must confirm RPC chain 61999.
 - Confirm wallet signer permissions, balance, expected fee and GenVM cost. NEVER expose keys/seed in logs; no arbitrary fee assumptions.
-- **Hard cumulative safety ceiling: 10 GEN** unless user changes it explicitly; first funded demonstration <=0.01 GEN if technically possible. If fees cannot be estimated, pause deployment and report, not guess.
+- Historical: a cumulative spending ceiling was originally proposed. On StudioNet gas price and gas used measured 0, so no ceiling was needed; other networks must be measured before deploying.
 - Contracts are unpaid, do not transfer or custody funds. Record independent fee receipt for writes.
 
 ## Gate 3 — live transaction and source parity

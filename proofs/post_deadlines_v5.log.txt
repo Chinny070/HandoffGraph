@@ -1,0 +1,16 @@
+now=1792658837
+  delivery_deadline: 1792655456,
+  state: 1,
+expire-delivery-4	0xfa53fc958f56c5022914fbb8735cd29527e02812072df3b2aa6b3715197a243e	FINALIZED	MAJORITY_AGREE
+  revocation_hash: 'c1689525964024428c1b87d9ae46e39238154d86bb61fadbf9f491ef4c8ea218',
+  ruling: 4,
+  state: 7,
+expire-delivery-4-again	0x365fb6bdce397b3935695f8ae04e40987621e02609224da92ba7a4c373834e1d	FINALIZED	MAJORITY_AGREE
+stage 1 release still active:
+true
+short capability view (expired):
+false
+CKS-after-expiry	0x51f758fda714ff37aca548311e1c295d6583aee17153c078cadd95f570760c36	FINALIZED	MAJORITY_AGREE
+  expires_at: 1792657288,
+  use_count: 1,
+POST_DEADLINES_DONE

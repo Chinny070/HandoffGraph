@@ -17,6 +17,15 @@ Evidence tiers used below: **Live** (StudioNet transactions, `LIVE_PROOFS.md`, `
 | F6 | High (finality) | Consumers authorized irreversible actions from accepted-state reads. `StorageType.LATEST_FINAL` cross-contract reads hang on StudioNet (reproduced against a trivial contract), so they could not be used. | Live | Both consumers now require an accepted-state gate AND a finalized-state gate fetched from the RPC by every validator under strict equality; any failure denies | Offline (RPC error, non-200, wrong value, finalized false), Live |
 | F7 | Info | Early diagnosis blamed five cross-contract view calls for a 600 s leader timeout. The real cause was the `LATEST_FINAL` hang (F6); call count was never shown to matter. | Live | Kept a single `is_release_bound` core view as a simplification (smaller consumer surface) | `test_is_release_bound_gate` |
 
+## Findings from the second review pass (all fixed, with tests)
+
+| # | Severity | Finding | Fix | Regression tests |
+|---|---|---|---|---|
+| F8 | High (integrity) | The counterexample court freed the stage's slot and lifted quarantine when the jury result's free-text `gap` equalled `SOURCE_UNAVAILABLE`. Validators did not compare `gap`, so a malicious leader could pair a genuinely undecided model verdict (or a model that wrote that string) with this label and neutralize valid counterevidence. | Source availability is a separate boolean `source_ok` produced by the leader and **recomputed by every validator from its own fetch**; mismatch rejects the result. `SOURCE_UNAVAILABLE` is reserved (a model-written gap with that text is renamed; a validator rejects it when sources verify). State transitions use `source_ok`, never `gap`. | Direct: forged unavailability when sources verify, forged `source_ok` when they do not, legacy result without the field, reserved-gap smuggling, court slot not freed by model-claimed unavailability |
+| F9 | High (integrity) | A descendant's PASS and release were checked only against its prerequisites' current state. After an upstream repair and re-release (new receipt), an already-released descendant silently became active again though it was judged against the old output. | Each submission commits to the exact receipts of its prerequisites (`parent_digest`, part of the submission hash and therefore the receipt). `is_release_active`, `is_release_bound` and `release` require the digest to be current (`STALE_PREREQUISITE`); permissionless `invalidate_stale` withdraws stale decisions so the stage is re-evaluated. A dismissed counterexample leaves the parent receipt unchanged, so descendants stay valid. | Direct: released descendant after upstream repair, stale-but-unreleased, mid-review, unchanged parents, dismissed counterexample; **Live: v5 run** |
+| F10 | Medium (finality disclosure) | The consumer examples did not state that their finalized-state gate trusts the RPC, and accepted any JSON shape. | Docstrings and `get_status` disclose `trustless_finality: false`; strict JSON-RPC envelope validation (version, id, no error, no extra keys, bounded size, exact `True`). | Offline: 15 dishonest or malformed responses per consumer, a dishonest "yes" cannot override an accepted-state denial |
+| F11 | Info (tooling) | The genlayer CLI keeps a single global active account; another process switched it mid-run and corrupted a live run. | Live scripts use a private CLI home, abort on the first submission failure, and the run was repeated on a fresh core. | `scripts/live/lib.sh` |
+
 ## Properties reviewed
 
 - **Access control.** Owner-only: add stage/requirement, set timeout, seal, freeze, thaw. Worker-only: submit, support, retry, repair, counterexample appeal. Reviewer-only: challenge. Reviewer or owner: open counterexample. Worker or reviewer: appeal. Permissionless by design: assess, resolve_*, finalize_unappealed, expire_*, release. Direct tests assert every rejection (`test_unauthorized_actions_rejected`, `test_only_owner_can_freeze_or_thaw`, invalid-appeal tests). Live: outsider appeal, non-owner freeze, non-worker support attach, non-operator consumer calls all rejected.
@@ -43,6 +52,6 @@ Evidence tiers used below: **Live** (StudioNet transactions, `LIVE_PROOFS.md`, `
 
 | Tier | Count | Scope |
 |---|---|---|
-| Offline (mock runtime) | see `BUILD_STATUS.md` | State machine, consumers, adversarial inputs; NOT consensus |
-| Direct Mode (real GenVM) | 93 | Lifecycle, freeze, support, counterexample court, expiries, adversarial matrix, validator replay |
-| Live StudioNet | see `LIVE_PROOFS.md` | Deployments, lifecycles, consumers, negative paths |
+| Offline (mock runtime) | 175 | State machine, consumers, adversarial inputs; NOT consensus |
+| Direct Mode (real GenVM) | 105 | Lifecycle, freeze, support, counterexample court, expiries, malicious-leader substitution, descendant binding, validator replay |
+| Live StudioNet | 496 reconciled transactions, 99 in the current run | Deployments, lifecycles, consumers, negative paths; independent RPC recheck in `proofs/RECHECK.md` |

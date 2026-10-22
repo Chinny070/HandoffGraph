@@ -1,0 +1,271 @@
+{
+ "contracts": [
+  {
+   "name": "HandoffGraph core v5",
+   "address": "0x9629E19c11Ab40d9848575A8E699E1d48DBDA209",
+   "file": "contracts/handoff_graph.py"
+  },
+  {
+   "name": "Consumer example (stage 1)",
+   "address": "0xf7555975184b18F56223bb77b0E255761A4bFee0",
+   "file": "contracts/handoff_consumer_example.py"
+  },
+  {
+   "name": "Consumer example (stage 3)",
+   "address": "0x05a4A3c90F8F1CFADEdEFc942D517bc9F5a76A74",
+   "file": "contracts/handoff_consumer_example.py"
+  },
+  {
+   "name": "Capability consumer (25 min)",
+   "address": "0x1A263E205D65D3E452680D648c5051Fb2635fd16",
+   "file": "contracts/handoff_capability_consumer.py"
+  },
+  {
+   "name": "Capability consumer (24 h)",
+   "address": "0xF1b86f0B5FcE6E33435E424a09fbe076A745aeAC",
+   "file": "contracts/handoff_capability_consumer.py"
+  }
+ ],
+ "transactions": [
+  {
+   "label": "seal",
+   "tx": "0xb1a6dcacdbc174e5790df6dda83b7a2bdf6045f4751cd4075cfd808c1482268f",
+   "expect_consensus": "MAJORITY_AGREE",
+   "expect_outcome": "return"
+  },
+  {
+   "label": "submit-while-frozen",
+   "tx": "0x0cd862f03d32736e8a1b2d343d2c8c0d2f2f87dfd0cec3367f48f7e0f59e21a5",
+   "expect_consensus": "MAJORITY_AGREE",
+   "expect_outcome": "user_error:WORKFLOW_FROZEN"
+  },
+  {
+   "label": "freeze-by-nonowner",
+   "tx": "0x00ec73c9851d3bcd59260e87b5581f0f299ddc82858e52a273f365a3041574cd",
+   "expect_consensus": "MAJORITY_AGREE",
+   "expect_outcome": "user_error:ONLY_OWNER"
+  },
+  {
+   "label": "s1-support",
+   "tx": "0x0e9375768a02f68326311ee67b90201c9f20253fe6e5adfa5fe106a6df71f568",
+   "expect_consensus": "MAJORITY_AGREE",
+   "expect_outcome": "return"
+  },
+  {
+   "label": "s1-support-again",
+   "tx": "0xe09f02c05d101f357ec563d233e65d2966ae090cc05992b43ad69de3b66473fe",
+   "expect_consensus": "MAJORITY_AGREE",
+   "expect_outcome": "user_error:SUPPORT_NOT_OPEN"
+  },
+  {
+   "label": "s1-assess",
+   "tx": "0x28ab69ae96d93423ea362b8ff24e43a99adb3b7fcf07913b78f3c1fffd156db6",
+   "expect_consensus": "MAJORITY_AGREE",
+   "expect_outcome": "return"
+  },
+  {
+   "label": "s1-resolve",
+   "tx": "0xff40af1a1a921907b66b7917a2cbcf85342c408f172b66c1c20913d64773e5c7",
+   "expect_consensus": "MAJORITY_AGREE",
+   "expect_outcome": "return"
+  },
+  {
+   "label": "release-while-frozen",
+   "tx": "0xe25d6f07c667c72b4c3bc27577d2d901a4afa47f73e47f6d17f6e4687b7407ca",
+   "expect_consensus": "MAJORITY_AGREE",
+   "expect_outcome": "user_error:WORKFLOW_FROZEN"
+  },
+  {
+   "label": "s1-release",
+   "tx": "0x749764c0fa80ed18b07fbed9639f6d9bd990b00b33fa25d8ea3f5290c989e0b5",
+   "expect_consensus": "MAJORITY_AGREE",
+   "expect_outcome": "return"
+  },
+  {
+   "label": "s1-release-replay",
+   "tx": "0xc3cea0058d9604ef541335df2b3b84fdf8c4ccc97af927e5b062b0959ec64e71",
+   "expect_consensus": "MAJORITY_AGREE",
+   "expect_outcome": "user_error:ALREADY_RELEASED"
+  },
+  {
+   "label": "s3-release-failed",
+   "tx": "0xa2133474536c66b836b5c51a207758924c1ea0720513fba227be6aa871f01fc7",
+   "expect_consensus": "MAJORITY_AGREE",
+   "expect_outcome": "user_error:NOT_FINAL_PASS"
+  },
+  {
+   "label": "s3-release",
+   "tx": "0xac95435592d80209784c817f4ac1ce7e693552f682f7da85ead4f23e99b503f1",
+   "expect_consensus": "MAJORITY_AGREE",
+   "expect_outcome": "return"
+  },
+  {
+   "label": "CA-unauth",
+   "tx": "0x4f430608de542dbd32a43eb7ed8e36461b6bc0c7a34ec8ae36a057425c8358a7",
+   "expect_consensus": "MAJORITY_AGREE",
+   "expect_outcome": "user_error:ONLY_OPERATOR"
+  },
+  {
+   "label": "CA-wrong-receipt",
+   "tx": "0x8ea86fbf379d1afa60f35f366cd2c02f3d253a2fe6dffe86fc54ba49905358e5",
+   "expect_consensus": "MAJORITY_AGREE",
+   "expect_outcome": "user_error:HANDOFF_NOT_RELEASED"
+  },
+  {
+   "label": "CA-exec",
+   "tx": "0x9e2f7ed8bfad809f6828fba1ad3292f5e2ebbc160ae841f6c1456c7cf8cbcceb",
+   "expect_consensus": "MAJORITY_AGREE",
+   "expect_outcome": "return"
+  },
+  {
+   "label": "CA-replay",
+   "tx": "0xdcc3ff425e3d9f782da678309ed62647da02a927cf66000956e3af39e7810056",
+   "expect_consensus": "MAJORITY_AGREE",
+   "expect_outcome": "user_error:ALREADY_EXECUTED"
+  },
+  {
+   "label": "CKS-consume-1",
+   "tx": "0x13ff5f0b3a1986ba8ba7ffbe20574342820889527fc72dae170d62eac099f436",
+   "expect_consensus": "MAJORITY_AGREE",
+   "expect_outcome": "return"
+  },
+  {
+   "label": "CKS-replay-1",
+   "tx": "0x5e218133325f95401abcce24f42dfe965a75e2d8cb35d00850bc799cda0093b9",
+   "expect_consensus": "MAJORITY_AGREE",
+   "expect_outcome": "user_error:CAPABILITY_INVALID"
+  },
+  {
+   "label": "CKS-wrong-action",
+   "tx": "0x60ca8e69b1eb1dd7fe449f420dc1c78d78fde42dfb4441a316cb70e26e4ded10",
+   "expect_consensus": "MAJORITY_AGREE",
+   "expect_outcome": "user_error:CAPABILITY_INVALID"
+  },
+  {
+   "label": "CKL-unauth",
+   "tx": "0xbb252190a23574dcac6d8c04fe120f62b592fe5afee65500b2bd8196767cba4c",
+   "expect_consensus": "MAJORITY_AGREE",
+   "expect_outcome": "user_error:ONLY_OPERATOR"
+  },
+  {
+   "label": "cx-open",
+   "tx": "0x2d09a708d69fc14fdab35e6f36d2113f7bdeec878e90680e444ed699ba34e2b5",
+   "expect_consensus": "MAJORITY_AGREE",
+   "expect_outcome": "return"
+  },
+  {
+   "label": "cx-resolve",
+   "tx": "0x9d575215b64fec5f77e5bf63d898710034a8a19a40d3ecd0a25f84ba9d4474d4",
+   "expect_consensus": "MAJORITY_AGREE",
+   "expect_outcome": "return"
+  },
+  {
+   "label": "CKL-consume-after-cx",
+   "tx": "0xb60a68328a6414b5af3503b8510de5948b9f36d9d99e66ff0a95fe255127c40a",
+   "expect_consensus": "MAJORITY_AGREE",
+   "expect_outcome": "user_error:CAPABILITY_INVALID"
+  },
+  {
+   "label": "cx-appeal-outsider",
+   "tx": "0x291d2693231434403bcd6daf4c6f491afce6d2cd48bdc122a5a4d57a6a1bd917",
+   "expect_consensus": "MAJORITY_AGREE",
+   "expect_outcome": "user_error:ONLY_WORKER"
+  },
+  {
+   "label": "cx-appeal",
+   "tx": "0x350f373b67559f297b3bdeb160426f093058460f9aa21b632b5534d1417bc40d",
+   "expect_consensus": "MAJORITY_AGREE",
+   "expect_outcome": "return"
+  },
+  {
+   "label": "repair-while-appeal-pending",
+   "tx": "0x47b19a2d32011391cda164605b296a4ba0d6ee0ddb1fdca0a621f9da597ffc88",
+   "expect_consensus": "MAJORITY_AGREE",
+   "expect_outcome": "user_error:COUNTER_APPEAL_PENDING"
+  },
+  {
+   "label": "cx-appeal-resolve",
+   "tx": "0x49618d460b73ef6d3faabffb488f4e259968505545b2f840c9dbf56f78b5a08c",
+   "expect_consensus": "MAJORITY_AGREE",
+   "expect_outcome": "return"
+  },
+  {
+   "label": "repair",
+   "tx": "0x611356f34dbd036383f01c0a25c1a38369c65a6a2b579d898665f97e59267508",
+   "expect_consensus": "MAJORITY_AGREE",
+   "expect_outcome": "return"
+  },
+  {
+   "label": "s1-release-2",
+   "tx": "0x99a02b81a2d2cf0e7b675b5bf3c87c168e96cadb638f87d4932a721834f9f3d9",
+   "expect_consensus": "MAJORITY_AGREE",
+   "expect_outcome": "return"
+  },
+  {
+   "label": "s2-release-stale",
+   "tx": "0xe68a592b629ad75616fec55af0ff9b3c9b84298cd69a6bd1ce1a29f92b2680d0",
+   "expect_consensus": "MAJORITY_AGREE",
+   "expect_outcome": "user_error:STALE_PREREQUISITE"
+  },
+  {
+   "label": "s2-invalidate",
+   "tx": "0xdd768fe9ca4b54ad11a54ec5060a69fd4ee3b21a4291d91ffea7c524fd6fa0d9",
+   "expect_consensus": "MAJORITY_AGREE",
+   "expect_outcome": "return"
+  },
+  {
+   "label": "s2-invalidate-again",
+   "tx": "0x0e76d6c3f31b28a82f337e31085982e054c0ae2fbb0767e8e69db0389d407bd0",
+   "expect_consensus": "MAJORITY_AGREE",
+   "expect_outcome": "user_error:NOT_INVALIDATABLE"
+  },
+  {
+   "label": "s2-release-2",
+   "tx": "0x26ace4a1bcf1974d8db3b11b56132feefe52cbf2a76a5227323e99b104ee6eab",
+   "expect_consensus": "MAJORITY_AGREE",
+   "expect_outcome": "return"
+  },
+  {
+   "label": "CKL-consume-after-recovery",
+   "tx": "0xedbec3285e7cc2df676a1b9e0bd06d58daf9f05418a5c0b060242aaf71e287e7",
+   "expect_consensus": "MAJORITY_AGREE",
+   "expect_outcome": "return"
+  },
+  {
+   "label": "CKL-over-cap",
+   "tx": "0xbb20cafcc716f926faf8284dd8901544180068fd824ca15c6af0cff4c48ea7f7",
+   "expect_consensus": "MAJORITY_AGREE",
+   "expect_outcome": "user_error:CAPABILITY_INVALID"
+  },
+  {
+   "label": "CA3-exec",
+   "tx": "0x9740754bf6714f7d80cb7c6122ec9c2b6d68e18906733c06d71aac6c1c96263d",
+   "expect_consensus": "MAJORITY_AGREE",
+   "expect_outcome": "return"
+  },
+  {
+   "label": "CA3-replay",
+   "tx": "0xde94a863d54fd08089bf0830d91d84bc4ece110f9807d83729101f27c8ed0451",
+   "expect_consensus": "MAJORITY_AGREE",
+   "expect_outcome": "user_error:ALREADY_EXECUTED"
+  },
+  {
+   "label": "expire-delivery-4",
+   "tx": "0xfa53fc958f56c5022914fbb8735cd29527e02812072df3b2aa6b3715197a243e",
+   "expect_consensus": "MAJORITY_AGREE",
+   "expect_outcome": "return"
+  },
+  {
+   "label": "expire-delivery-4-again",
+   "tx": "0x365fb6bdce397b3935695f8ae04e40987621e02609224da92ba7a4c373834e1d",
+   "expect_consensus": "MAJORITY_AGREE",
+   "expect_outcome": "user_error:DELIVERY_NOT_EXPIRABLE"
+  },
+  {
+   "label": "CKS-after-expiry",
+   "tx": "0x51f758fda714ff37aca548311e1c295d6583aee17153c078cadd95f570760c36",
+   "expect_consensus": "MAJORITY_AGREE",
+   "expect_outcome": "user_error:CAPABILITY_INVALID"
+  }
+ ]
+}

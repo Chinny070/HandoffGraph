@@ -1,0 +1,3 @@
+stage5 review_deadline=1792701652 stage6 appeal_deadline=1792745043 (started 2026-10-22T08:53:18Z)
+--- stage 5 assess before the review window closes (must be rejected REVIEW_WINDOW_OPEN)
+t5-assess-early	0x750f9a16093b672d7bfae839f3ee33d0126823aec37f8c698cb65ce4278b1175	FINALIZED	MAJORITY_AGREE

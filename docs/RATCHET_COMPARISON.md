@@ -11,16 +11,16 @@ This compares two different GenLayer contracts on facts that can be checked. It 
 | Core state machine | Up to 8 tracks, sealed genesis, monotonic versions | DAG of up to 16 stages, sealed root, review/dispute/appeal/final/release, counterexample court, repair |
 | Evidence handling | Policy text | Commit-pinned GitHub bytes with SHA-256, optional support artifact |
 | Consumers | One example consumer | One-shot consumer and an action-scoped capability consumer |
-| Source size | not stated on its page | ~56 KB core |
+| Source size | not stated on its page | ~60 KB core |
 
 ## Evidence that exists today
 
 | | Ratchet (self-reported, unverified by me) | HandoffGraph (verified in this repository) |
 |---|---|---|
-| Offline mock tests | 14 | 141 |
-| Real GenVM Direct Mode tests | 24 (author's workstation) | 93 (run here, `direct_tests/`) |
+| Offline mock tests | 14 | 175 |
+| Real GenVM Direct Mode tests | 24 (author's workstation) | 105 (run here, `direct_tests/`) |
 | GenVM lint | not stated | pass on all 3 contracts |
-| Live StudioNet deployment | contract and consumer addresses and source hashes listed; consumer deny-then-allow reported | core v4 + 4 consumers deployed; 325 transactions reconciled FINALIZED; source parity verified |
+| Live StudioNet deployment | contract and consumer addresses and source hashes listed; consumer deny-then-allow reported | core v5 + 4 consumers deployed; 496 transactions reconciled FINALIZED; source parity verified and independently rechecked over the RPC |
 | Live negative paths | not stated on its page | rejections recorded with decoded reasons (`proofs/tx_reconciled.tsv`) |
 | Live validator disagreement observed | not stated | 10 transactions ended MAJORITY_DISAGREE with no state change |
 | Documented limitations | semantic guardrail, not a formal proof; LLM errors possible | see `SECURITY_AUDIT.md`: probabilistic judgement, finality gate trusts the RPC, long-window expiries not all live-proven, self-review only |
